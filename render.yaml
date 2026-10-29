@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: promiden-pharma-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SAME_SITE
+        value: none
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: APP_ORIGIN
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: SESSION_COOKIE_NAME
+        value: promiden.sid

@@ -1,0 +1,27 @@
+{
+  "name": "promiden-pharmaceuticals-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Express API for Promiden Pharmaceuticals Ltd",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "create-admin": "node src/scripts/create-admin.js",
+    "check": "node --check src/server.js && node --check src/routes/admin.js && node --check src/routes/public.js && node --check src/routes/payments.js && node --check src/routes/public.js && node --check src/middleware/auth.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.0",
+    "bcryptjs": "^3.0.2",
+    "connect-pg-simple": "^10.0.0",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "express-session": "^1.18.2",
+    "helmet": "^8.1.0",
+    "pg": "^8.16.3"
+  }
+}

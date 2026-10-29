@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Promiden Pharmaceuticals logo">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1681df"/><stop offset="1" stop-color="#073b70"/></linearGradient></defs>
+  <rect x="3" y="3" width="94" height="94" rx="25" fill="url(#g)"/>
+  <path d="M50 18c-3 0-5 2-5 5v12H33c-3 0-5 2-5 5v7c0 3 2 5 5 5h12v12c0 3 2 5 5 5s5-2 5-5V57h12c3 0 5-2 5-5v-7c0-3-2-5-5-5H55V23c0-3-2-5-5-5Z" fill="#fff"/>
+  <path d="M22 77h56" stroke="#b9e4ff" stroke-width="4" stroke-linecap="round"/>
+</svg>

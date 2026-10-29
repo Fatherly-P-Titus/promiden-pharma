@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0757a6">
+  <meta name="description" content="Review your Promiden Pharmaceuticals product and service order before proceeding to secure payment.">
+  <title>Review Your Order | Promiden Pharmaceuticals Ltd</title>
+  <link rel="icon" href="assets/icons/favicon.ico" sizes="any">
+  <link rel="icon" type="image/svg+xml" href="assets/icons/promiden-favicon.svg">
+  <link rel="stylesheet" href="styles/payment.css">
+  <script src="scripts/jquery.js"></script>
+  <script defer src="scripts/runtime-config.js"></script>
+  <script defer src="scripts/payment.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="checkout-header">
+    <div class="checkout-header-inner">
+      <a class="brand" href="index.html" aria-label="Promiden Pharmaceuticals home">
+        <img src="assets/icons/promiden-favicon.svg" alt="" width="46" height="46">
+        <span><strong>PROMIDEN</strong><small>PHARMACEUTICALS LTD</small></span>
+      </a>
+      <a class="back-link" href="index.html">← Back to website</a>
+    </div>
+  </header>
+  <main id="main-content" class="checkout-main">
+    <section class="checkout-intro">
+      <p class="eyebrow"><span></span> SECURE ORDER REVIEW</p>
+      <h1>Review your <span>order.</span></h1>
+      <p>Check your selected products or services and contact details before continuing. Payment will take place on Paystack's secure hosted checkout.</p>
+      <div class="stepper" aria-label="Checkout progress">
+        <div class="step active"><span>1</span><b>Review order</b></div><i></i>
+        <div class="step"><span>2</span><b>Secure payment</b></div><i></i>
+        <div class="step"><span>3</span><b>Confirmation</b></div>
+      </div>
+    </section>
+
+    <div class="checkout-layout">
+      <section class="panel catalogue-panel" aria-labelledby="catalogue-heading">
+        <div class="panel-heading"><div><p class="eyebrow">PROMIDEN CATALOGUE</p><h2 id="catalogue-heading">Add to your order</h2></div><span class="catalogue-count" id="catalogue-count">Loading…</span></div>
+        <div class="catalogue-controls">
+          <label class="search-field"><span class="sr-only">Search products and services</span><span aria-hidden="true">⌕</span><input id="catalogue-search" type="search" placeholder="Search products and services" autocomplete="off"></label>
+          <div class="type-tabs" role="group" aria-label="Catalogue type"><button type="button" class="type-tab active" data-type="all" aria-pressed="true">All</button><button type="button" class="type-tab" data-type="product" aria-pressed="false">Products</button><button type="button" class="type-tab" data-type="service" aria-pressed="false">Services</button></div>
+        </div>
+        <div id="catalogue-list" class="catalogue-list" aria-live="polite"><div class="loading-state"><span class="spinner"></span><p>Loading available catalogue items…</p></div></div>
+        <div class="catalogue-footnote"><span aria-hidden="true">ⓘ</span><p>Only published items with a verified price are available to add. If an item has no price, contact Promiden for a quote.</p></div>
+      </section>
+
+      <aside class="order-column">
+        <section class="panel order-panel" aria-labelledby="order-heading">
+          <div class="panel-heading"><div><p class="eyebrow">YOUR SELECTION</p><h2 id="order-heading">Order summary</h2></div><span class="cart-badge" id="cart-count">0</span></div>
+          <div id="order-items" class="order-items"><div class="empty-cart"><span class="empty-cart-icon">＋</span><strong>Your order is empty</strong><p>Add a priced product or service from the catalogue.</p></div></div>
+          <div class="order-totals"><div><span>Subtotal</span><strong id="subtotal">₦0.00</strong></div><div class="total-row"><span>Total due</span><strong id="total">₦0.00</strong></div><p>Prices are shown in Nigerian naira (NGN). Any applicable fees must be shown before payment.</p></div>
+        </section>
+        <section class="panel customer-panel" aria-labelledby="customer-heading">
+          <div class="panel-heading"><div><p class="eyebrow">ORDER CONTACT</p><h2 id="customer-heading">Your details</h2></div></div>
+          <form id="checkout-form" novalidate>
+            <label for="customer-name">Full name <span>*</span></label><input id="customer-name" name="name" type="text" autocomplete="name" maxlength="120" required placeholder="Enter your full name">
+            <label for="customer-email">Email address <span>*</span></label><input id="customer-email" name="email" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com">
+            <label for="customer-phone">Phone number <span>*</span></label><input id="customer-phone" name="phone" type="tel" autocomplete="tel" maxlength="30" required placeholder="e.g. 08012345678">
+            <label for="customer-note">Order note <small>(optional)</small></label><textarea id="customer-note" name="note" rows="3" maxlength="500" placeholder="Add delivery or service details (no medical records, please)"></textarea>
+            <label class="consent-check"><input id="terms-check" type="checkbox" required><span>I confirm these order details are correct and understand that this step does not yet constitute payment.</span></label>
+            <div id="form-message" class="form-message" role="alert" aria-live="polite" hidden></div>
+            <button id="continue-button" class="pay-button" type="submit"><span>Continue to payment</span><b aria-hidden="true">→</b></button>
+            <p class="secure-note"><span aria-hidden="true">♢</span> You'll be redirected to Paystack's secure hosted checkout.</p>
+          </form>
+        </section>
+      </aside>
+    </div>
+    <section class="checkout-notice" id="integration-notice"><span class="notice-icon" aria-hidden="true">i</span><div><strong>Secure checkout</strong><p>Your order and amount are validated and saved by the server before Paystack checkout begins. Returning to this page does not confirm payment; the server-side verification milestone is still required before an order can be marked paid.</p></div></section>
+  </main>
+  <footer class="checkout-footer"><span>© <span id="current-year"></span> Promiden Pharmaceuticals Ltd.</span><span>Responsible care · Secure checkout design</span><a href="index.html">Return to website</a></footer>
+</body>
+</html>

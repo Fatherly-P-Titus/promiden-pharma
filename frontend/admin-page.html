@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0757a6">
+  <meta name="description" content="Promiden Pharmaceuticals Ltd website administration dashboard.">
+  <title>Admin Dashboard | Promiden Pharmaceuticals Ltd</title>
+  <link rel="icon" href="assets/icons/favicon.ico" sizes="any">
+  <link rel="icon" type="image/svg+xml" href="assets/icons/promiden-favicon.svg">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles/homepage.css">
+  <link rel="stylesheet" href="styles/admin-page.css">
+  <script src="scripts/jquery.js"></script>
+  <script defer src="scripts/runtime-config.js"></script>
+  <script defer src="scripts/admin-page.js"></script>
+</head>
+<body class="dashboard-page">
+  <a class="skip-link" href="#dashboard-main">Skip to dashboard</a>
+  <header class="dashboard-topbar">
+    <a class="dashboard-brand" href="index.html">
+      <img src="assets/icons/promiden-favicon.svg" alt="" width="42" height="42">
+      <span><strong>PROMIDEN</strong><small>ADMIN CONSOLE</small></span>
+    </a>
+    <div class="topbar-actions">
+      <a class="view-site-link" href="index.html" target="_blank" rel="noopener noreferrer">View website <span aria-hidden="true">↗</span></a>
+      <button class="button button-outline button-small" type="button" id="logout-button">Sign out</button>
+    </div>
+  </header>
+  <div class="dashboard-layout">
+    <aside class="dashboard-sidebar" aria-label="Dashboard sections">
+      <div class="sidebar-caption">WORKSPACE</div>
+      <button class="sidebar-link active" type="button" data-panel="overview"><span class="sidebar-icon">⌂</span>Overview</button>
+      <button class="sidebar-link" type="button" data-panel="homepage"><span class="sidebar-icon">▤</span>Homepage content</button>
+      <button class="sidebar-link" type="button" data-panel="products"><span class="sidebar-icon">▦</span>Products</button>
+      <button class="sidebar-link" type="button" data-panel="services"><span class="sidebar-icon">✚</span>Services</button>
+      <button class="sidebar-link" type="button" data-panel="orders"><span class="sidebar-icon">▣</span>Orders & payments</button>
+      <button class="sidebar-link" type="button" data-panel="contact"><span class="sidebar-icon">✉</span>Contact & social</button>
+      <button class="sidebar-link" type="button" data-panel="admins"><span class="sidebar-icon">♙</span>Administrators</button>
+      <div class="sidebar-footer"><span class="sidebar-status-dot"></span><span>Admin workspace</span><small>M04 · Dashboard UI</small></div>
+    </aside>
+
+    <main id="dashboard-main" class="dashboard-main">
+      <div id="dashboard-notice" class="dashboard-notice" role="status" aria-live="polite" hidden></div>
+      <div class="prototype-warning" id="prototype-warning"><strong>Prototype mode</strong><span>Changes are saved in this browser only until the Express API and Supabase integration are connected. This page is not secure until the server enforces session authentication.</span></div>
+
+      <section class="dashboard-panel active" id="panel-overview" data-title="Overview">
+        <div class="dashboard-heading"><div><p class="dashboard-eyebrow">YOUR WORKSPACE</p><h1>Dashboard overview</h1><p>Manage the public-facing content for Promiden Pharmaceuticals Ltd.</p></div><span class="dashboard-date" id="today-label"></span></div>
+        <div class="overview-cards">
+          <article class="overview-card"><span class="overview-card-icon blue-icon">▤</span><div><span class="overview-label">Homepage sections</span><strong>4</strong><small>Hero, products, services, contact</small></div></article>
+          <article class="overview-card"><span class="overview-card-icon green-icon">▦</span><div><span class="overview-label">Product listings</span><strong id="overview-product-count">3</strong><small>Current browser draft</small></div></article>
+          <article class="overview-card"><span class="overview-card-icon violet-icon">✚</span><div><span class="overview-label">Services</span><strong id="overview-service-count">3</strong><small>Current browser draft</small></div></article>
+        </div>
+        <div class="dashboard-columns">
+          <section class="dashboard-card quick-actions"><div class="card-heading"><div><h2>Quick actions</h2><p>Go straight to a content area.</p></div></div><div class="quick-action-grid"><button type="button" data-go="homepage"><span>✎</span><strong>Edit homepage</strong><small>Brand and hero text</small></button><button type="button" data-go="products"><span>▦</span><strong>Manage products</strong><small>Add or update listings</small></button><button type="button" data-go="services"><span>✚</span><strong>Manage services</strong><small>Update service descriptions</small></button><button type="button" data-go="contact"><span>✉</span><strong>Update contact details</strong><small>Email, phone and social links</small></button></div></section>
+          <section class="dashboard-card readiness-card"><div class="card-heading"><div><h2>Integration status</h2><p>What is needed before production.</p></div></div><ul class="readiness-list"><li><span class="status-pill status-demo">UI ready</span><div><strong>Admin dashboard interface</strong><small>Forms and browser draft controls are available.</small></div></li><li><span class="status-pill status-pending">Pending</span><div><strong>Express session authentication</strong><small>Protect this page and all admin API routes.</small></div></li><li><span class="status-pill status-pending">Pending</span><div><strong>Supabase persistence</strong><small>Store site settings, products, services and images.</small></div></li></ul></section>
+        </div>
+        <div class="dashboard-card safety-card"><span class="safety-icon">i</span><div><strong>Before publishing</strong><p>Replace illustrative products, service descriptions and placeholder contact details with verified company information. Do not enter real administrator passwords while the backend is not connected.</p></div></div>
+      </section>
+
+      <section class="dashboard-panel" id="panel-homepage" data-title="Homepage content" hidden>
+        <div class="dashboard-heading"><div><p class="dashboard-eyebrow">SITE EDITOR</p><h1>Homepage content</h1><p>Control the brand label and main hero message.</p></div></div>
+        <form id="homepage-form" class="dashboard-card editor-form">
+          <div class="card-heading"><div><h2>Brand and hero</h2><p>These fields control the main introduction shown on the homepage.</p></div></div>
+          <div class="form-grid"><div class="dashboard-field"><label for="brand-name-input">Brand name</label><input id="brand-name-input" name="brandName" maxlength="80" required><small>Shown in the main header brand label.</small></div><div class="dashboard-field field-span-2"><label for="hero-title-input">Hero headline</label><input id="hero-title-input" name="heroTitle" maxlength="180" required><small>Keep the main message concise and factual.</small></div><div class="dashboard-field field-span-2"><label for="hero-description-input">Hero description</label><textarea id="hero-description-input" name="heroDescription" rows="4" maxlength="500" required></textarea><small id="hero-description-count">0 / 500</small></div></div>
+          <div class="form-actions"><button class="button button-outline" type="button" data-reset="homepage">Reset draft</button><button class="button button-primary" type="submit">Save homepage draft <span aria-hidden="true">→</span></button></div>
+        </form>
+      </section>
+
+      <section class="dashboard-panel" id="panel-products" data-title="Products" hidden>
+        <div class="dashboard-heading"><div><p class="dashboard-eyebrow">CATALOGUE MANAGEMENT</p><h1>Products</h1><p>Create and maintain the product cards shown on the public website.</p></div><button class="button button-primary" id="add-product-button" type="button">＋ Add product</button></div>
+        <div class="dashboard-card"><div class="table-toolbar"><div><h2>Product listings</h2><p>Product prices are optional; do not publish unverified prices.</p></div><span class="count-badge" id="product-list-count">3 items</span></div><div id="products-list" class="managed-list"></div><div class="form-actions list-actions"><button class="button button-outline" type="button" data-reset="products">Reset product draft</button><button class="button button-primary" id="save-products-button" type="button">Save product draft</button></div></div>
+      </section>
+
+      <section class="dashboard-panel" id="panel-services" data-title="Services" hidden>
+        <div class="dashboard-heading"><div><p class="dashboard-eyebrow">SERVICE MANAGEMENT</p><h1>Services</h1><p>Maintain the service descriptions displayed to visitors.</p></div><button class="button button-primary" id="add-service-button" type="button">＋ Add service</button></div>
+        <div class="dashboard-card"><div class="table-toolbar"><div><h2>Service listings</h2><p>Use clear descriptions and avoid unsupported medical claims.</p></div><span class="count-badge" id="service-list-count">3 items</span></div><div id="services-list" class="managed-list"></div><div class="form-actions list-actions"><button class="button button-outline" type="button" data-reset="services">Reset service draft</button><button class="button button-primary" id="save-services-button" type="button">Save service draft</button></div></div>
+      </section>
+
+      <section class="dashboard-panel" id="panel-orders" data-title="Orders & payments" hidden>
+        <div class="dashboard-heading"><div><p class="dashboard-eyebrow">COMMERCE OPERATIONS</p><h1>Orders & payments</h1><p>Review customer orders, inspect Paystack verification history, and update fulfilment status.</p></div><button class="button button-primary" id="orders-refresh-button" type="button">Refresh orders</button></div>
+        <div class="dashboard-card">
+          <div class="table-toolbar"><div><h2>Order register</h2><p>Payment status is system-controlled. Never mark an order as paid manually.</p></div><span class="count-badge" id="orders-count">Not loaded</span></div>
+          <div class="order-filters"><label>Order status<select id="orders-status-filter"><option value="">All statuses</option><option value="awaiting_payment">Awaiting payment</option><option value="confirmed">Confirmed</option><option value="processing">Processing</option><option value="fulfilled">Fulfilled</option><option value="cancelled">Cancelled</option></select></label><label>Payment status<select id="payments-status-filter"><option value="">All payments</option><option value="pending">Pending</option><option value="successful">Successful</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option><option value="refunded">Refunded</option></select></label><button class="button button-outline" id="orders-filter-button" type="button">Apply filters</button></div>
+          <div id="orders-list" class="orders-list"><div class="empty-list"><strong>Orders have not been loaded.</strong>Select this section or press Refresh orders.</div></div>
+          <div class="orders-pagination"><button class="button button-outline button-small" id="orders-prev-button" type="button" disabled>Previous</button><span id="orders-page-label">Page 1</span><button class="button button-outline button-small" id="orders-next-button" type="button" disabled>Next</button></div>
+        </div>
+        <section class="dashboard-card order-detail-card" id="order-detail-card" hidden><div class="card-heading"><div><p class="dashboard-eyebrow">ORDER RECORD</p><h2 id="order-detail-title">Order details</h2><p id="order-detail-meta"></p></div><button class="button button-outline button-small" id="order-detail-close" type="button">Close details</button></div><div id="order-detail-content"></div></section>
+      </section>
+
+      <section class="dashboard-panel" id="panel-contact" data-title="Contact & social" hidden>
+        <div class="dashboard-heading"><div><p class="dashboard-eyebrow">PUBLIC CONTACT DETAILS</p><h1>Contact & social links</h1><p>Update the contact information shown in the homepage footer and contact area.</p></div></div>
+        <form id="contact-form" class="dashboard-card editor-form">
+          <div class="card-heading"><div><h2>Contact information</h2><p>Only enter contact details approved for public display.</p></div></div>
+          <div class="form-grid"><div class="dashboard-field"><label for="contact-email-input">Public email address</label><input id="contact-email-input" name="email" type="email" maxlength="160" placeholder="info@example.com"><small>Leave blank to hide or omit the address.</small></div><div class="dashboard-field"><label for="contact-phone-input">Public phone number</label><input id="contact-phone-input" name="phone" type="tel" maxlength="40" placeholder="+234…"></div><div class="dashboard-field"><label for="facebook-input">Facebook URL</label><input id="facebook-input" name="facebook" type="url" maxlength="300" placeholder="https://facebook.com/…"></div><div class="dashboard-field"><label for="twitter-input">X / Twitter URL</label><input id="twitter-input" name="twitter" type="url" maxlength="300" placeholder="https://x.com/…"></div><div class="dashboard-field"><label for="instagram-input">Instagram URL</label><input id="instagram-input" name="instagram" type="url" maxlength="300" placeholder="https://instagram.com/…"></div></div>
+          <div class="form-actions"><button class="button button-outline" type="button" data-reset="contact">Reset draft</button><button class="button button-primary" type="submit">Save contact draft <span aria-hidden="true">→</span></button></div>
+        </form>
+      </section>
+
+      <section class="dashboard-panel" id="panel-admins" data-title="Administrators" hidden>
+        <div class="dashboard-heading"><div><p class="dashboard-eyebrow">ACCESS MANAGEMENT</p><h1>Administrators</h1><p>Manage accounts that can access this website’s administration area.</p></div></div>
+        <div class="dashboard-card security-callout"><span class="safety-icon">!</span><div><strong>Server integration required</strong><p>Admin account creation and removal are intentionally disabled in prototype mode. These actions must be handled by authenticated Express endpoints with server-side password hashing and authorization. Passwords must never be saved in browser storage.</p></div></div>
+        <div class="dashboard-columns admin-columns"><section class="dashboard-card"><div class="card-heading"><div><h2>Create administrator</h2><p>Available after backend integration.</p></div></div><form id="create-admin-form"><div class="dashboard-field"><label for="new-admin-username">Username</label><input id="new-admin-username" name="username" minlength="3" maxlength="100" autocomplete="off" required disabled></div><div class="dashboard-field"><label for="new-admin-password">Temporary password</label><input id="new-admin-password" name="password" type="password" minlength="12" maxlength="256" autocomplete="new-password" required disabled></div><div class="dashboard-field"><label for="confirm-admin-password">Confirm password</label><input id="confirm-admin-password" name="confirmPassword" type="password" minlength="12" maxlength="256" autocomplete="new-password" required disabled></div><button class="button button-primary" type="submit" disabled>Create administrator</button></form></section><section class="dashboard-card"><div class="card-heading"><div><h2>Existing accounts</h2><p>Account list loads from the server when connected.</p></div></div><div class="empty-admin-state"><span>♙</span><strong>Admin directory unavailable</strong><p>Connect the admin-management API to list or remove accounts. Never use a public client-side list as the authority for access control.</p></div></section></div>
+      </section>
+      <footer class="dashboard-footer"><span>Promiden Pharmaceuticals Ltd · Admin Console</span><span>Commerce management · M10</span></footer>
+    </main>
+  </div>
+  <dialog class="editor-dialog" id="item-dialog" aria-labelledby="item-dialog-title">
+    <form id="item-form" method="dialog">
+      <div class="dialog-heading"><div><p class="dashboard-eyebrow" id="item-dialog-kicker">CATALOGUE EDITOR</p><h2 id="item-dialog-title">Add product</h2></div><button class="dialog-close" type="button" id="dialog-close" aria-label="Close dialog">×</button></div>
+      <div id="item-fields"></div><div class="form-actions dialog-actions"><button class="button button-outline" type="button" id="dialog-cancel">Cancel</button><button class="button button-primary" type="submit" id="dialog-save">Save item</button></div>
+    </form>
+  </dialog>
+  <noscript><div class="noscript-message">JavaScript is required to use the administration dashboard.</div></noscript>
+</body>
+</html>
