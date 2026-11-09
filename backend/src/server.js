@@ -56,7 +56,13 @@ app.get('/api/health', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
     res.json({ success: true, service: 'promiden-api', status: 'ok' });
-  } catch (_error) {
+  } catch (error) {
+    console.error('Health check PostgreSQL query failed:', {
+      name: error.name,
+      code: error.code,
+      severity: error.severity,
+      message: String(error.message || '').replace(/(postgres(?:ql)?:\/\/[^:\s/]+:)[^@/\s]+@/gi, '$1[REDACTED]').replace(/(password\s*[=:]\s*)\S+/gi, '$1[REDACTED]')
+    });
     res.status(503).json({ success: false, service: 'promiden-api', status: 'session-store-unavailable' });
   }
 });
