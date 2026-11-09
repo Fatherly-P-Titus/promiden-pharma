@@ -61,7 +61,7 @@ app.get('/api/health', async (_req, res) => {
       name: error.name,
       code: error.code,
       severity: error.severity,
-      message: String(error.message || '').replace(/(postgres(?:ql)?:\\/\\/[^:\\s/]+:)[^@/\\s]+@/gi, '$1[REDACTED]').replace(/(password\\s*[=:]\\s*)\\S+/gi, '$1[REDACTED]')
+      message: String(error.message || '').replace(/(postgres(?:ql)?:\/\/[^:\s/]+:)[^@/\s]+@/gi, '$1[REDACTED]').replace(/(password\s*[=:]\s*)\S+/gi, '$1[REDACTED]')
     });
     res.status(503).json({ success: false, service: 'promiden-api', status: 'session-store-unavailable' });
   }
