@@ -9,6 +9,24 @@ const router = express.Router();
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false, message: { success: false, message: 'Too many sign-in attempts. Try again in 15 minutes.' } });
 const usernamePattern = /^[a-zA-Z0-9._-]{3,100}$/;
 
+function safeDiagnosticText(value, maxLength = 500) {
+  return String(value || '')
+    .replace(/eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/g, '[REDACTED_TOKEN]')
+    .replace(/(?:sb_secret_|sb_publishable_|service_role|anon)[a-zA-Z0-9._-]{12,}/gi, '[REDACTED_KEY]')
+    .replace(/https?:\/\/[^\s"'<>]+/gi, '[REDACTED_URL]')
+    .slice(0, maxLength);
+}
+
+function logAdminLookupFailure(error) {
+  console.error('Admin login Supabase lookup failed:', {
+    code: safeDiagnosticText(error?.code, 80) || null,
+    status: Number.isFinite(Number(error?.status || error?.statusCode)) ? Number(error.status || error.statusCode) : null,
+    message: safeDiagnosticText(error?.message, 500) || 'Unknown Supabase error',
+    details: safeDiagnosticText(error?.details, 500) || null,
+    hint: safeDiagnosticText(error?.hint, 300) || null
+  });
+}
+
 router.get('/session', (req, res) => {
   if (!req.session?.admin) return res.status(401).json({ success: false, authenticated: false });
   res.json({ success: true, authenticated: true, admin: { id: req.session.admin.id, username: req.session.admin.username } });
@@ -19,8 +37,21 @@ router.post('/login', loginLimiter, requireSameOrigin, async (req, res) => {
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
   if (!username || !password || username.length > 100 || password.length > 256) return res.status(400).json({ success: false, message: 'Enter a valid username and password.' });
   const normalized = username.toLowerCase();
-  const { data: admin, error } = await supabase.from('admin_users').select('id,username,password_hash,is_active').eq('username_normalized', normalized).maybeSingle();
-  if (error) return res.status(503).json({ success: false, message: 'Authentication service is temporarily unavailable.' });
+  let admin;
+  try {
+    const { data, error } = await supabase.from('admin_users')
+      .select('id,username,password_hash,is_active')
+      .eq('username_normalized', normalized)
+      .maybeSingle();
+    if (error) {
+      logAdminLookupFailure(error);
+      return res.status(503).json({ success: false, message: 'Authentication service is temporarily unavailable.' });
+    }
+    admin = data;
+  } catch (error) {
+    logAdminLookupFailure(error);
+    return res.status(503).json({ success: false, message: 'Authentication service is temporarily unavailable.' });
+  }
   const matches = admin?.is_active && await bcrypt.compare(password, admin.password_hash).catch(() => false);
   if (!matches) return res.status(401).json({ success: false, message: 'The username or password is incorrect, or this account is inactive.' });
   await supabase.from('admin_users').update({ last_login_at: new Date().toISOString() }).eq('id', admin.id);
