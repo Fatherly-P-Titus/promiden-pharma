@@ -8,7 +8,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "create-admin": "node src/scripts/create-admin.js",
-    "check": "node --check src/server.js && node --check src/routes/admin.js && node --check src/routes/public.js && node --check src/routes/payments.js && node --check src/routes/public.js && node --check src/middleware/auth.js"
+    "check": "node --check src/server.js && node --check src/routes/admin.js && node --check src/routes/public.js && node --check src/routes/payments.js && node --check src/middleware/auth.js"
   },
   "engines": {
     "node": ">=20.0.0"

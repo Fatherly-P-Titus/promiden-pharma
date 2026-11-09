@@ -56,15 +56,9 @@ app.get('/api/health', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
     res.json({ success: true, service: 'promiden-api', status: 'ok' });
-  } catch (error) {
-  console.error('Health check database error:', error.message);
-
-  res.status(503).json({
-    success: false,
-    service: 'promiden-api',
-    status: 'session-store-unavailable'
-  });
-}
+  } catch (_error) {
+    res.status(503).json({ success: false, service: 'promiden-api', status: 'session-store-unavailable' });
+  }
 });
 app.use('/api/public', publicRoutes);
 app.use('/api', paymentRoutes);

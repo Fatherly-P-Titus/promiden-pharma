@@ -30,12 +30,12 @@ async function getAuthoritativeItems(lines) {
   const productsIds = [...normalized.keys()].filter(k => k.startsWith('product:')).map(k => k.slice(8));
   const servicesIds = [...normalized.keys()].filter(k => k.startsWith('service:')).map(k => k.slice(8));
   const lookups = await Promise.all([
-    productsIds.length ? supabase.from('products').select('id,name,description,price_minor,published').in('id', productsIds).eq('published', true) : Promise.resolve({ data: [], error: null }),
+    productsIds.length ? supabase.from('products').select('id,name,description,price_minor,published,stock_quantity,inventory_tracking').in('id', productsIds).eq('published', true) : Promise.resolve({ data: [], error: null }),
     servicesIds.length ? supabase.from('services').select('id,title,description,price_minor,published').in('id', servicesIds).eq('published', true) : Promise.resolve({ data: [], error: null })
   ]);
   if (lookups.some(result => result.error)) throw Object.assign(new Error('The catalogue is temporarily unavailable. Please try again later.'), { status: 503 });
   const rows = new Map();
-  for (const item of lookups[0].data || []) rows.set(`product:${item.id}`, { type: 'product', id: item.id, name: item.name, description: item.description || '', price: Number(item.price_minor) });
+  for (const item of lookups[0].data || []) rows.set(`product:${item.id}`, { type: 'product', id: item.id, name: item.name, description: item.description || '', price: Number(item.price_minor), stockQuantity: Math.max(0, Number(item.stock_quantity) || 0), inventoryTracking: item.inventory_tracking !== false });
   for (const item of lookups[1].data || []) rows.set(`service:${item.id}`, { type: 'service', id: item.id, name: item.title, description: item.description || '', price: Number(item.price_minor) });
   const result = [];
   let total = 0;
@@ -43,6 +43,9 @@ async function getAuthoritativeItems(lines) {
     const item = rows.get(key);
     if (!item) throw Object.assign(new Error('An item is no longer available. Refresh the catalogue and review your order.'), { status: 409 });
     if (!moneyIsSafe(item.price)) throw Object.assign(new Error('An item does not have a valid online price yet. Please contact Promiden.'), { status: 409 });
+    if (item.type === 'product' && item.inventoryTracking && quantity > item.stockQuantity) {
+      throw Object.assign(new Error(`${item.name} has only ${item.stockQuantity} unit(s) available. Update your cart and try again.`), { status: 409 });
+    }
     const lineTotal = item.price * quantity;
     if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(total + lineTotal) || total + lineTotal > 1000000000) throw Object.assign(new Error('The order total exceeds Paystack’s supported online payment limit.'), { status: 400 });
     total += lineTotal;
@@ -116,9 +119,20 @@ router.post('/payments/initialize', async (req, res) => {
     const { data: order, error: orderError } = await supabase.from('orders').select('*').eq('id', orderId).maybeSingle();
     if (orderError) throw orderError;
     if (!order) return fail(res, 404, 'Order not found. Please review your order again.');
-    if (order.payment_status === 'successful' || order.order_status !== 'awaiting_payment') return fail(res, 409, 'This order is not awaiting payment.');
+    if (order.payment_status === 'successful' || order.payment_status === 'refunded' || order.order_status !== 'awaiting_payment') return fail(res, 409, 'This order is not awaiting payment.');
     const amount = Number(order.total_minor);
     if (!moneyIsSafe(amount) || order.currency !== 'NGN') return fail(res, 409, 'The order amount is not valid for online payment.');
+    // Reuse an existing pending Paystack session instead of creating another
+    // chargeable reference when a customer retries the checkout button.
+    const { data: pendingTx, error: pendingTxError } = await supabase.from('payment_transactions').select('provider_reference,authorization_url,amount_minor,currency').eq('order_id', order.id).eq('status', 'pending').order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (pendingTxError) throw pendingTxError;
+    if (pendingTx && pendingTx.authorization_url && Number(pendingTx.amount_minor) === amount && pendingTx.currency === 'NGN') {
+      return res.status(200).json({ success: true, reused: true, order: { id: order.id, orderNumber: order.order_number, totalMinor: amount, currency: 'NGN' }, payment: { provider: 'paystack', reference: pendingTx.provider_reference, authorizationUrl: pendingTx.authorization_url } });
+    }
+    if (['failed', 'cancelled'].includes(order.payment_status)) {
+      const { error: resetOrderError } = await supabase.from('orders').update({ payment_status: 'pending', updated_at: new Date().toISOString() }).eq('id', order.id).eq('order_status', 'awaiting_payment');
+      if (resetOrderError) throw resetOrderError;
+    }
     const reference = `pmd_${Date.now()}_${randomBytes(8).toString('hex')}`;
     const origin = (process.env.APP_ORIGIN || '').replace(/\/$/, '');
     if (!origin || !/^https?:\/\//i.test(origin)) return fail(res, 503, 'The payment callback URL is not configured. Please contact Promiden.');
@@ -184,17 +198,27 @@ async function applyVerifiedTransaction(data) {
   }
 
   if (success) {
-    // Do not downgrade a previously successful payment; retries and webhook/callback races are expected.
-    const { error: updateTxError } = await supabase.from('payment_transactions').update({
-      status: 'successful', provider_transaction_id: data.id == null ? null : String(data.id),
-      channel: typeof data.channel === 'string' ? data.channel.slice(0, 80) : null,
-      gateway_response: typeof data.gateway_response === 'string' ? data.gateway_response.slice(0, 200) : 'Successful transaction verified with Paystack.',
-      verified_at: now, successful_at: tx.successful_at || now, updated_at: now
-    }).eq('id', tx.id);
-    if (updateTxError) throw updateTxError;
-    const { error: updateOrderError } = await supabase.from('orders').update({ payment_status: 'successful', order_status: order.order_status === 'awaiting_payment' ? 'confirmed' : order.order_status, paid_at: order.paid_at || now, updated_at: now }).eq('id', order.id);
-    if (updateOrderError) throw updateOrderError;
-    return { outcome: 'successful', orderId: order.id, orderNumber: order.order_number };
+    // Payment and inventory are committed together by the database function.
+    // If stock changed after checkout, payment is still recorded as successful,
+    // but inventory is left untouched and the order is flagged for staff review.
+    const { data: confirmation, error: confirmationError } = await supabase.rpc('promiden_confirm_paid_order_inventory', {
+      p_order_id: order.id,
+      p_provider_reference: reference,
+      p_provider_transaction_id: data.id == null ? null : String(data.id),
+      p_channel: typeof data.channel === 'string' ? data.channel.slice(0, 80) : null,
+      p_gateway_response: typeof data.gateway_response === 'string' ? data.gateway_response.slice(0, 200) : 'Successful transaction verified with Paystack.'
+    });
+    if (confirmationError) {
+      console.error('Atomic payment confirmation failed:', confirmationError.message || confirmationError);
+      throw Object.assign(new Error('Payment was verified, but order confirmation is temporarily delayed. Please do not pay again; contact Promiden if this message persists.'), { status: 503 });
+    }
+    const confirmed = Array.isArray(confirmation) ? confirmation[0] : confirmation;
+    if (!confirmed || confirmed.order_id !== order.id) throw Object.assign(new Error('The payment confirmation response was incomplete.'), { status: 503 });
+    const { data: confirmedOrder, error: confirmedOrderError } = await supabase.from('orders').select('inventory_status').eq('id', order.id).single();
+    if (confirmedOrderError) throw confirmedOrderError;
+    const inventoryStatus = confirmedOrder.inventory_status || (confirmed.inventory_deducted ? 'deducted' : 'not_required');
+    const inventoryAttention = inventoryStatus === 'attention_required';
+    return { outcome: inventoryAttention ? 'successful_inventory_attention' : 'successful', orderId: order.id, orderNumber: order.order_number, inventoryStatus };
   }
 
   const allowedStatuses = new Set(['failed', 'abandoned', 'ongoing', 'pending', 'processing', 'reversed', 'queued']);
@@ -219,7 +243,7 @@ router.get('/payments/verify/:reference', async (req, res) => {
     const verified = await verifyWithPaystack(reference);
     const result = await applyVerifiedTransaction(verified);
     if (result.outcome === 'unmatched' || result.outcome === 'mismatch') return fail(res, 409, 'We could not match this transaction to the expected order. Please contact Promiden for assistance.');
-    return res.json({ success: true, status: result.outcome, orderNumber: result.orderNumber || null, message: result.outcome === 'successful' ? 'Payment confirmed.' : 'Payment is not confirmed as successful yet.' });
+    return res.json({ success: true, status: result.outcome, inventoryStatus: result.inventoryStatus || null, orderNumber: result.orderNumber || null, message: ['successful', 'successful_inventory_attention'].includes(result.outcome) ? 'Payment confirmed.' : 'Payment is not confirmed as successful yet.' });
   } catch (error) {
     const status = Number.isInteger(error.status) ? error.status : 502;
     if (status >= 500) console.error('Payment verification failed:', error.message || error);
@@ -252,7 +276,7 @@ router.post('/webhooks/paystack', async (req, res) => {
     let outcome = 'ignored';
     if (eventType === 'charge.success' && event?.data) {
       const result = await applyVerifiedTransaction(event.data);
-      outcome = result.outcome === 'successful' ? 'processed' : (result.outcome === 'unmatched' || result.outcome === 'mismatch' ? 'failed' : 'ignored');
+      outcome = ['successful', 'successful_inventory_attention'].includes(result.outcome) ? 'processed' : (result.outcome === 'unmatched' || result.outcome === 'mismatch' ? 'failed' : 'ignored');
     }
     const { error: eventUpdateError } = await supabase.from('payment_events').update({ processing_status: outcome, processed_at: new Date().toISOString(), error_summary: outcome === 'failed' ? 'Transaction could not be matched to the stored order and payment.' : null }).eq('id', savedEvent.id);
     if (eventUpdateError) throw eventUpdateError;

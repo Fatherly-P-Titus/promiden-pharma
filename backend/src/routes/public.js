@@ -16,7 +16,7 @@ router.get('/site-settings', async (_req, res) => {
 });
 
 router.get('/products', async (_req, res) => {
-  const { data, error } = await supabase.from('products').select('id,name,description,category,price,price_minor,image_url,published,sort_order').eq('published', true).order('sort_order').order('created_at');
+  const { data, error } = await supabase.from('products').select('id,name,description,category,price,price_minor,image_url,published,sort_order,stock_quantity,inventory_tracking').eq('published', true).order('sort_order').order('created_at');
   if (error) return res.status(503).json({ success: false, message: 'Products are temporarily unavailable.' });
   res.json((data || []).map((item) => ({ ...item, imageUrl: item.image_url || '' })));
 });

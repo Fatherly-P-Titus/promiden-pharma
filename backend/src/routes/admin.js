@@ -119,6 +119,39 @@ function collectionRoutes(kind) {
   });
 }
 collectionRoutes('products');
+
+// M11.02: server-authoritative inventory operations. All routes are behind requireAdmin.
+router.patch('/products/:id/stock', async (req, res) => {
+  const quantity = req.body?.quantity;
+  const note = typeof req.body?.note === 'string' ? req.body.note.trim().slice(0, 500) : 'Administrator stock update';
+  const key = req.get('Idempotency-Key');
+  if (!Number.isInteger(quantity) || quantity < 0 || quantity > 100000000) {
+    return res.status(400).json({ success: false, message: 'Stock quantity must be a whole number greater than or equal to zero.' });
+  }
+  const { data: product, error: productError } = await supabase.from('products').select('id,stock_quantity').eq('id', req.params.id).maybeSingle();
+  if (productError) return res.status(503).json({ success: false, message: 'Product stock could not be loaded.' });
+  if (!product) return res.status(404).json({ success: false, message: 'Product not found.' });
+  const delta = quantity - product.stock_quantity;
+  if (delta === 0) return res.json({ success: true, stockQuantity: product.stock_quantity, unchanged: true });
+  const movementType = product.stock_quantity === 0 && quantity > 0 ? 'opening_balance' : (delta > 0 ? 'restock' : 'adjustment');
+  const { data, error } = await supabase.rpc('promiden_adjust_product_stock', {
+    p_product_id: product.id, p_quantity_delta: delta, p_movement_type: movementType,
+    p_performed_by: req.session.admin.id, p_note: note,
+    p_idempotency_key: key || `admin-stock:${req.session.admin.id}:${product.id}:${Date.now()}`
+  });
+  if (error) {
+    console.error('Admin stock adjustment failed:', error.message);
+    return res.status(409).json({ success: false, message: error.message.includes('Insufficient stock') ? 'This adjustment would make stock negative.' : 'Stock could not be updated.' });
+  }
+  res.json({ success: true, stockQuantity: data?.[0]?.stock_quantity ?? quantity });
+});
+
+router.get('/products/:id/inventory-movements', async (req, res) => {
+  const { data, error } = await supabase.from('inventory_movements').select('id,movement_type,quantity_delta,quantity_before,quantity_after,note,created_at').eq('product_id', req.params.id).order('created_at', { ascending: false }).limit(100);
+  if (error) return res.status(503).json({ success: false, message: 'Inventory history could not be loaded.' });
+  res.json({ success: true, movements: data || [] });
+});
+
 collectionRoutes('services');
 
 router.get('/administrators', async (_req, res) => {
