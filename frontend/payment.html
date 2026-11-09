@@ -21,7 +21,7 @@
         <img src="assets/icons/promiden-favicon.svg" alt="" width="46" height="46">
         <span><strong>PROMIDEN</strong><small>PHARMACEUTICALS LTD</small></span>
       </a>
-      <a class="back-link" href="index.html">← Back to website</a>
+      <a class="back-link" href="products.html">← Continue shopping</a>
     </div>
   </header>
   <main id="main-content" class="checkout-main">
@@ -50,7 +50,7 @@
       <aside class="order-column">
         <section class="panel order-panel" aria-labelledby="order-heading">
           <div class="panel-heading"><div><p class="eyebrow">YOUR SELECTION</p><h2 id="order-heading">Order summary</h2></div><span class="cart-badge" id="cart-count">0</span></div>
-          <div id="order-items" class="order-items"><div class="empty-cart"><span class="empty-cart-icon">＋</span><strong>Your order is empty</strong><p>Add a priced product or service from the catalogue.</p></div></div>
+          <div id="cart-stock-warning" class="cart-stock-warning" role="alert" hidden></div><div id="order-items" class="order-items"><div class="empty-cart"><span class="empty-cart-icon">＋</span><strong>Your order is empty</strong><p>Add a priced product or service from the catalogue.</p></div></div>
           <div class="order-totals"><div><span>Subtotal</span><strong id="subtotal">₦0.00</strong></div><div class="total-row"><span>Total due</span><strong id="total">₦0.00</strong></div><p>Prices are shown in Nigerian naira (NGN). Any applicable fees must be shown before payment.</p></div>
         </section>
         <section class="panel customer-panel" aria-labelledby="customer-heading">
@@ -68,7 +68,7 @@
         </section>
       </aside>
     </div>
-    <section class="checkout-notice" id="integration-notice"><span class="notice-icon" aria-hidden="true">i</span><div><strong>Secure checkout</strong><p>Your order and amount are validated and saved by the server before Paystack checkout begins. Returning to this page does not confirm payment; the server-side verification milestone is still required before an order can be marked paid.</p></div></section>
+    <section class="checkout-notice" id="integration-notice"><span class="notice-icon" aria-hidden="true">i</span><div><strong>Secure checkout</strong><p>Your order and amount are validated by the server before Paystack checkout begins. The server verifies payment directly with Paystack before marking an order paid. Inventory is deducted only after verified payment; if stock changes during checkout, Promiden records the payment and flags the order for staff review.</p></div></section>
   </main>
   <footer class="checkout-footer"><span>© <span id="current-year"></span> Promiden Pharmaceuticals Ltd.</span><span>Responsible care · Secure checkout design</span><a href="index.html">Return to website</a></footer>
 </body>

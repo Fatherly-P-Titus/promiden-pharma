@@ -130,7 +130,7 @@
       const name = isProduct ? item.name : item.title;
       const image = safeImageUrl(item.imageUrl);
       const meta = isProduct
-        ? `<span class="managed-tag">${escapeHtml(item.category || 'Uncategorised')}</span>${item.price ? `<span class="managed-tag">${escapeHtml(item.price)}</span>` : '<span class="managed-tag">Price not set</span>'}`
+        ? `<span class="managed-tag">${escapeHtml(item.category || 'Uncategorised')}</span>${item.price ? `<span class="managed-tag">${escapeHtml(item.price)}</span>` : '<span class="managed-tag">Price not set</span>'}<span class="managed-tag">Stock: ${Number(item.stockQuantity || 0)}</span>`
         : `<span class="managed-tag">Service ${String(index + 1).padStart(2, '0')}</span>`;
       return `<article class="managed-item" data-id="${escapeHtml(item.id)}">
         <div class="managed-item-mark" aria-hidden="true">${image ? '▧' : (isProduct ? '▦' : '✚')}</div>
@@ -153,7 +153,8 @@
     $('#item-fields').innerHTML = `<div class="dashboard-field"><label for="item-name">${nameLabel}</label><input id="item-name" name="name" required maxlength="140" value="${escapeHtml(nameValue)}"></div>
       <div class="dashboard-field"><label for="item-description">Description</label><textarea id="item-description" name="description" rows="4" required maxlength="700">${escapeHtml(item ? item.description : '')}</textarea><small>Keep the wording accurate and avoid unsupported medical claims.</small></div>
       ${categoryField}
-      <div class="dashboard-field"><label for="item-image">Image URL (optional)</label><input id="item-image" name="imageUrl" type="url" maxlength="1000" value="${escapeHtml(item ? item.imageUrl : '')}" placeholder="https://…"><small>Image upload/storage is part of backend integration. For this prototype, use a public HTTPS image URL.</small></div>
+      ${isProduct ? `<div class="dashboard-field"><label for="item-stock">Available stock quantity</label><input id="item-stock" name="stockQuantity" type="number" min="0" max="100000000" step="1" required value="${Number.isInteger(item?.stockQuantity) ? item.stockQuantity : 0}"><small>Whole sellable units. Stock changes are recorded in the inventory ledger.</small></div>` : ''}
+      <div class="dashboard-field"><label for="item-image">Image URL (optional)</label><input id="item-image" name="imageUrl" type="url" maxlength="1000" value="${escapeHtml(item ? item.imageUrl : '')}" placeholder="https://…"><small>Use a publicly accessible HTTPS image URL. Managed storage upload can be added separately.</small></div>
       <label class="visibility-option"><input id="item-published" name="published" type="checkbox" ${!item || item.published !== false ? 'checked' : ''}> Show this item on the website draft</label>`;
     if (isProduct && item) $('#item-category').value = item.category || 'Other';
     if (isProduct && !item) $('#item-category').value = 'Wellness';
@@ -165,11 +166,12 @@
     const dialog = $('#item-dialog');
     if (typeof dialog.close === 'function') dialog.close(); else dialog.removeAttribute('open');
   }
-  function deleteItem(kind, id) {
+  async function deleteItem(kind, id) {
     const item = state[kind].find(entry => entry.id === id);
     if (!item) return;
     const name = kind === 'products' ? item.name : item.title;
-    if (!window.confirm(`Remove “${name || 'this item'}” from the local draft?`)) return;
+    if (!window.confirm(`Permanently remove “${name || 'this item'}” from the catalogue?`)) return;
+    if (kind === 'products') { try { await adminRequest(`/api/admin/products/${encodeURIComponent(id)}`, { method: 'DELETE' }); } catch (error) { notify(error.message, 'error'); return; } }
     state[kind] = state[kind].filter(entry => entry.id !== id);
     renderItems(kind);
     persistDraft(kind);
@@ -266,6 +268,7 @@
     fillForms();
     renderItems('products');
     renderItems('services');
+    if (API_BASE) adminRequest('/api/admin/products').then(result => { state.products = (result.items || []).map(p => ({ id:p.id, name:p.name, description:p.description, category:p.category || '', price:p.price || '', imageUrl:p.image_url || '', published:p.published !== false, stockQuantity:Number(p.stock_quantity || 0) })); renderItems('products'); }).catch(error => notify(`Products could not be loaded from the server: ${error.message}`, 'error'));
 
     $$('.sidebar-link').forEach(button => button.addEventListener('click', () => navigate(button.dataset.panel)));
     $$('[data-go]').forEach(button => button.addEventListener('click', () => navigate(button.dataset.go)));
@@ -316,11 +319,12 @@
         const item = state[kind].find(entry => entry.id === id);
         if (!item) return;
         item.published = item.published === false;
-        renderItems(kind);
-        persistDraft(kind);
+        if (kind === 'products') {
+          adminRequest(`/api/admin/products/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ name:item.name, description:item.description, category:item.category, price:item.price, imageUrl:item.imageUrl, published:item.published }) }).then(() => { renderItems(kind); notify('Product visibility updated on the server.', 'success'); }).catch(error => { item.published = !item.published; renderItems(kind); notify(error.message, 'error'); });
+        } else { renderItems(kind); persistDraft(kind); }
       }
     }
-    $('#item-form').addEventListener('submit', event => {
+    $('#item-form').addEventListener('submit', async event => {
       event.preventDefault();
       const name = $('#item-name').value.trim();
       const description = $('#item-description').value.trim();
@@ -335,12 +339,23 @@
         item.name = name;
         item.category = $('#item-category').value;
         item.price = $('#item-price').value.trim();
+        item.stockQuantity = Number($('#item-stock').value);
+        if (!Number.isInteger(item.stockQuantity) || item.stockQuantity < 0) { notify('Stock must be a non-negative whole number.', 'error'); return; }
+        try {
+          const payload = { name: item.name, description: item.description, category: item.category, price: item.price, imageUrl: item.imageUrl, published: item.published };
+          let saved;
+          if (editingId) { saved = (await adminRequest(`/api/admin/products/${encodeURIComponent(editingId)}`, { method: 'PUT', body: JSON.stringify(payload) })).item; }
+          else { saved = (await adminRequest('/api/admin/products', { method: 'POST', body: JSON.stringify(payload) })).item; }
+          const targetId = saved.id;
+          const stockResult = await adminRequest(`/api/admin/products/${encodeURIComponent(targetId)}/stock`, { method: 'PATCH', headers: { 'Idempotency-Key': `admin-stock-${targetId}-${Date.now()}` }, body: JSON.stringify({ quantity: item.stockQuantity, note: 'Admin product editor stock setting' }) });
+          item.id = targetId; item.stockQuantity = stockResult.stockQuantity;
+        } catch (error) { notify(error.message, 'error'); return; }
       } else item.title = name;
       const index = state[editorKind].findIndex(entry => entry.id === editingId);
       if (index >= 0) state[editorKind][index] = item; else state[editorKind].push(item);
       closeEditor();
       renderItems(editorKind);
-      persistDraft(editorKind);
+      if (editorKind === 'products') notify('Product and stock changes saved to the server.', 'success'); else persistDraft(editorKind);
     });
     $('#dialog-close').addEventListener('click', closeEditor);
     $('#dialog-cancel').addEventListener('click', closeEditor);

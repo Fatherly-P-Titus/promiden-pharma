@@ -23,7 +23,7 @@
     ]);
     const products = results[0].status === "fulfilled" && Array.isArray(results[0].value) ? results[0].value : [];
     const services = results[1].status === "fulfilled" && Array.isArray(results[1].value) ? results[1].value : [];
-    state.catalogue = products.map(p => ({ id: String(p.id), type: "product", name: p.name || "Product", description: p.description || "", category: p.category || "Product", image: p.imageUrl || p.image_url || "", price_minor: p.price_minor == null ? null : Number(p.price_minor), published: p.published !== false }))
+    state.catalogue = products.map(p => ({ id: String(p.id), type: "product", name: p.name || "Product", description: p.description || "", category: p.category || "Product", image: p.imageUrl || p.image_url || "", price_minor: p.price_minor == null ? null : Number(p.price_minor), stock_quantity: Number.isInteger(Number(p.stock_quantity)) ? Math.max(0, Number(p.stock_quantity)) : 0, inventory_tracking: p.inventory_tracking !== false, published: p.published !== false }))
       .concat(services.map(s => ({ id: String(s.id), type: "service", name: s.title || s.name || "Service", description: s.description || "", category: "Service", image: s.imageUrl || s.image_url || "", price_minor: s.price_minor == null ? null : Number(s.price_minor), published: s.published !== false })))
       .filter(x => x.published);
     renderCatalogue(); renderCart();
@@ -45,9 +45,19 @@
       const price = formatPrice(item.price_minor);
       const image = safeImage(item.image);
       const thumb = image ? '<img src="' + escapeHtml(image) + '" alt="" loading="lazy">' : (item.type === "product" ? "▣" : "✚");
-      const available = Boolean(price);
-      return '<article class="catalogue-item"><div class="catalogue-thumb">' + thumb + '</div><div class="catalogue-copy"><span class="item-type">' + (item.type === "product" ? "Product" : "Service") + '</span><h3>' + escapeHtml(item.name) + '</h3><p>' + escapeHtml(item.description) + '</p><div class="catalogue-price">' + (available ? escapeHtml(price) : '<span class="not-priced">Price available on enquiry</span>') + '</div></div><button class="add-button" type="button" data-add-type="' + item.type + '" data-add-id="' + escapeHtml(item.id) + '" ' + (available ? '' : 'disabled title="This item is not yet configured for online payment"') + '>' + (available ? '＋ Add' : 'Enquire') + '</button></article>';
+      const available = Boolean(price) && (item.type !== 'product' || !item.inventory_tracking || item.stock_quantity > 0);
+      const stockNote = item.type === 'product' ? (item.inventory_tracking ? '<div class="stock-note ' + (item.stock_quantity > 0 ? 'in-stock' : 'out-stock') + '">' + (item.stock_quantity > 0 ? escapeHtml(String(item.stock_quantity) + ' in stock') : 'Out of stock') + '</div>' : '<div class="stock-note">Availability confirmed at checkout</div>') : '';
+      return '<article class="catalogue-item"><div class="catalogue-thumb">' + thumb + '</div><div class="catalogue-copy"><span class="item-type">' + (item.type === "product" ? "Product" : "Service") + '</span><h3>' + escapeHtml(item.name) + '</h3><p>' + escapeHtml(item.description) + '</p><div class="catalogue-price">' + (price ? escapeHtml(price) : '<span class="not-priced">Price available on enquiry</span>') + '</div>' + stockNote + '</div><button class="add-button" type="button" data-add-type="' + item.type + '" data-add-id="' + escapeHtml(item.id) + '" ' + (available ? '' : 'disabled title="This item is not yet configured for online payment"') + '>' + (available ? '＋ Add' : (item.type === 'product' && item.inventory_tracking && item.stock_quantity < 1 ? 'Out of stock' : 'Enquire')) + '</button></article>';
     }).join(""));
+  }
+
+  function lineStock(item) { return item && item.type === "product" && item.inventory_tracking ? Math.max(0, Number(item.stock_quantity) || 0) : Infinity; }
+
+  function cartIssues() {
+    return state.cart.filter(line => {
+      const item = itemFor(line);
+      return !item || (item.type === "product" && line.quantity > lineStock(item));
+    });
   }
 
   function renderCart() {
@@ -55,12 +65,18 @@
     saveCart();
     $("#cart-count").text(totalCount());
     $("#subtotal, #total").text(money.format(totalMinor() / 100));
+    const issues = cartIssues();
+    $("#cart-stock-warning").prop("hidden", !issues.length).text(issues.length ? "One or more product quantities exceed current stock. Reduce the highlighted quantities before continuing." : "");
+    $("#continue-button").prop("disabled", !state.cart.length || issues.length > 0);
     if (!state.cart.length) {
-      $("#order-items").html('<div class="empty-cart"><span class="empty-cart-icon">＋</span><strong>Your order is empty</strong><p>Add a priced product or service from the catalogue.</p></div>'); return;
+      $("#order-items").html('<div class="empty-cart"><span class="empty-cart-icon">＋</span><strong>Your order is empty</strong><p>Add a priced product or service from the catalogue.</p><a class="continue-shopping" href="products.html">Browse products</a></div>'); return;
     }
     $("#order-items").html(state.cart.map(line => {
       const item = itemFor(line); const lineTotal = Number(item.price_minor) * line.quantity;
-      return '<div class="order-line"><div><div class="order-line-title">' + escapeHtml(item.name) + '</div><div class="order-line-meta">' + (item.type === "product" ? "Product" : "Service") + ' · ' + escapeHtml(formatPrice(item.price_minor)) + ' each</div><div class="line-controls"><button class="qty-button" type="button" data-qty="-1" data-key="' + escapeHtml(itemKey(line.type,line.id)) + '" aria-label="Decrease quantity of ' + escapeHtml(item.name) + '">−</button><span class="qty-value">' + line.quantity + '</span><button class="qty-button" type="button" data-qty="1" data-key="' + escapeHtml(itemKey(line.type,line.id)) + '" aria-label="Increase quantity of ' + escapeHtml(item.name) + '">＋</button><button class="remove-button" type="button" data-remove="' + escapeHtml(itemKey(line.type,line.id)) + '">Remove</button></div></div><div class="line-price">' + escapeHtml(money.format(lineTotal / 100)) + '</div></div>';
+      const stock = lineStock(item); const over = line.quantity > stock;
+      const atLimit = line.quantity >= stock;
+      const stockText = Number.isFinite(stock) ? (over ? 'Only ' + stock + ' currently available — reduce quantity' : stock + ' in stock') : 'Service';
+      return '<div class="order-line ' + (over ? 'stock-conflict' : '') + '"><div><div class="order-line-title">' + escapeHtml(item.name) + '</div><div class="order-line-meta">' + (item.type === "product" ? "Product" : "Service") + ' · ' + escapeHtml(formatPrice(item.price_minor)) + ' each</div>' + (item.type === 'product' ? '<div class="cart-stock ' + (over ? 'conflict' : '') + '">' + escapeHtml(stockText) + '</div>' : '') + '<div class="line-controls"><button class="qty-button" type="button" data-qty="-1" data-key="' + escapeHtml(itemKey(line.type,line.id)) + '" aria-label="Decrease quantity of ' + escapeHtml(item.name) + '" ' + (line.quantity <= 1 ? 'disabled' : '') + '>−</button><span class="qty-value" aria-live="polite">' + line.quantity + '</span><button class="qty-button" type="button" data-qty="1" data-key="' + escapeHtml(itemKey(line.type,line.id)) + '" aria-label="Increase quantity of ' + escapeHtml(item.name) + '" ' + (atLimit ? 'disabled title="Maximum available stock reached"' : '') + '>＋</button><button class="remove-button" type="button" data-remove="' + escapeHtml(itemKey(line.type,line.id)) + '">Remove</button></div></div><div class="line-price">' + escapeHtml(money.format(lineTotal / 100)) + '</div></div>';
     }).join(""));
   }
 
@@ -68,8 +84,9 @@
     const item = state.catalogue.find(x => x.type === type && x.id === id);
     if (!item || !Number.isSafeInteger(Number(item.price_minor)) || Number(item.price_minor) <= 0) return;
     const line = state.cart.find(x => x.type === type && x.id === id);
-    if (line) { if (line.quantity < 1000) line.quantity += 1; }
-    else state.cart.push({ type, id, quantity: 1 });
+    const stock = lineStock(item);
+    if (line) { if (line.quantity >= stock || line.quantity >= 1000) { showMessage('You have reached the available stock for ' + item.name + '.', 'error'); return; } line.quantity += 1; }
+    else { if (stock < 1) { showMessage(item.name + ' is currently out of stock.', 'error'); return; } state.cart.push({ type, id, quantity: 1 }); }
     saveCart(); renderCart();
   }
 
@@ -88,10 +105,15 @@
       } else {
         $.ajax({ url: API_BASE + "/api/payments/verify/" + encodeURIComponent(reference), method: "GET", dataType: "json", timeout: 18000 })
           .done(function (result) {
-            if (result && result.success && result.status === "successful") {
+            if (result && result.success && ["successful", "successful_inventory_attention"].includes(result.status)) {
               try { localStorage.removeItem(CART_KEY); state.cart = []; renderCart(); } catch (_) {}
-              showMessage("Payment confirmed for order " + (result.orderNumber || "") + ". Thank you. Promiden has verified the transaction.", "info");
-              $("#integration-notice").find("strong").text("Payment confirmed").end().find("p").text("The server verified the transaction status, amount, currency, and reference with Paystack. Keep your order number for enquiries.");
+              if (result.status === "successful_inventory_attention") {
+                showMessage("Payment confirmed for order " + (result.orderNumber || "") + ". Promiden will review product availability before fulfilment. Do not pay again.", "info");
+                $("#integration-notice").find("strong").text("Payment confirmed — fulfilment review required").end().find("p").text("Paystack verified your payment. Product availability changed during checkout, so the order was flagged for Promiden staff review. Your payment is recorded; keep your order number for enquiries.");
+              } else {
+                showMessage("Payment confirmed for order " + (result.orderNumber || "") + ". Thank you. Promiden has verified the transaction.", "info");
+                $("#integration-notice").find("strong").text("Payment confirmed").end().find("p").text("The server verified the transaction status, amount, currency, and reference with Paystack. Keep your order number for enquiries.");
+              }
             } else {
               showMessage((result && result.message) || "Payment is not confirmed as successful yet. If you completed checkout, wait briefly and refresh this page to check again.", "info");
               $("#integration-notice").find("strong").text("Payment not yet confirmed").end().find("p").text("Do not submit another payment if you believe you were charged. Retry verification later or contact Promiden with your order details.");
@@ -109,12 +131,14 @@
     $("#order-items").on("click", "[data-qty]", function () {
       const key = String($(this).data("key")); const delta = Number($(this).data("qty"));
       const line = state.cart.find(x => itemKey(x.type,x.id) === key); if (!line) return;
-      line.quantity = Math.max(1, Math.min(1000, line.quantity + delta)); saveCart(); renderCart();
+      const item = itemFor(line); const maximum = lineStock(item);
+      line.quantity = delta > 0 ? Math.min(1000, maximum, line.quantity + delta) : Math.max(1, line.quantity + delta); saveCart(); renderCart();
     });
     $("#order-items").on("click", "[data-remove]", function () { const key = String($(this).data("remove")); state.cart = state.cart.filter(x => itemKey(x.type,x.id) !== key); saveCart(); renderCart(); });
     $("#checkout-form").on("submit", function (event) {
       event.preventDefault(); clearMessage();
       if (!state.cart.length) { showMessage("Add at least one priced product or service before continuing.", "error"); return; }
+      if (cartIssues().length) { showMessage("One or more product quantities exceed current stock. Update your cart before continuing.", "error"); renderCart(); return; }
       const form = this;
       if (!form.reportValidity()) return;
       if (!$("#terms-check").is(":checked")) { showMessage("Please confirm that your order details are correct.", "error"); return; }
