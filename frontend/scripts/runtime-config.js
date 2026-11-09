@@ -1,3 +1,5 @@
-/* Deployment setting: replace the empty string with the Render API base URL when frontend
-   and backend are deployed separately, e.g. https://promiden-api.onrender.com. No secret keys here. */
-window.PROMIDEN_API_BASE = window.PROMIDEN_API_BASE || '';
+/* Promiden Pharmaceuticals Ltd — public frontend API configuration.
+ * The frontend is hosted on Vercel and the Express API is hosted on Render.
+ * This URL is public configuration; never place API keys or other secrets here.
+ */
+window.PROMIDEN_API_BASE = 'https://promiden-pharma-api.onrender.com';
