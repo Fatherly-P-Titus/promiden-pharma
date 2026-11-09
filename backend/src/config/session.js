@@ -9,7 +9,14 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000
 });
-pool.on('error', (error) => console.error('Session database pool error:', error.message));
+pool.on('error', (error) => {
+  console.error('Session database pool error:', {
+    name: error.name,
+    code: error.code,
+    severity: error.severity,
+    message: String(error.message || '').replace(/(postgres(?:ql)?:\\/\\/[^:\\s/]+:)[^@/\\s]+@/gi, '$1[REDACTED]').replace(/(password\\s*[=:]\\s*)\\S+/gi, '$1[REDACTED]')
+  });
+});
 
 function createSessionMiddleware() {
   return session({
