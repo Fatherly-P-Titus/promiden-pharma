@@ -1,6 +1,6 @@
-/* Promiden Pharmaceuticals Ltd — M04 admin dashboard prototype.
- * Browser storage is only a local draft convenience, not shared persistence or access control.
- * Connect authenticated Express endpoints and Supabase before production use.
+/* Promiden Pharmaceuticals Ltd — authenticated administration dashboard.
+ * Products, inventory, services, media and orders use authenticated server endpoints.
+ * Homepage and contact settings remain local browser drafts until settings APIs are delivered.
  */
 (() => {
   'use strict';
@@ -32,8 +32,8 @@
   const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
   let state = {
     homepage: readDraft('homepage'),
-    products: readDraft('products'),
-    services: readDraft('services'),
+    products: [],
+    services: [],
     contact: readDraft('contact')
   };
   let editorKind = 'products';
@@ -90,6 +90,13 @@
     box.hidden = false;
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
+  function setConnectionStatus(state, title, detail) {
+    const panel = $('#dashboard-connection-status');
+    if (!panel) return;
+    panel.dataset.state = state;
+    $('#connection-status-title').textContent = title;
+    $('#connection-status-detail').textContent = detail;
+  }
   function navigate(panel) {
     const target = $(`#panel-${panel}`);
     if (!target) return;
@@ -98,8 +105,6 @@
       section.classList.toggle('active', section === target);
     });
     $$('.sidebar-link').forEach(button => button.classList.toggle('active', button.dataset.panel === panel));
-    const warning = $('#prototype-warning');
-    warning.hidden = panel === 'admins' || panel === 'orders';
     if (panel === 'orders') loadOrders();
     document.title = `${target.dataset.title || 'Dashboard'} | Promiden Pharmaceuticals Ltd`;
     if (window.matchMedia('(max-width: 760px)').matches) window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -142,7 +147,7 @@
         : `<span class="managed-tag">Service ${String(index + 1).padStart(2, '0')}</span>`;
       return `<article class="managed-item" data-id="${escapeHtml(item.id)}">
         <div class="managed-item-mark" aria-hidden="true">${image ? '▧' : (isProduct ? '▦' : '✚')}</div>
-        <div class="managed-item-main"><h3>${escapeHtml(name || (isProduct ? 'Untitled product' : 'Untitled service'))}</h3><p>${escapeHtml(item.description || 'No description provided.')}</p><div class="managed-item-meta">${meta}<span class="managed-tag">${item.published === false ? 'Hidden' : 'Visible in draft'}</span>${image ? '<span class="managed-tag">Image URL set</span>' : ''}</div></div>
+        <div class="managed-item-main"><h3>${escapeHtml(name || (isProduct ? 'Untitled product' : 'Untitled service'))}</h3><p>${escapeHtml(item.description || 'No description provided.')}</p><div class="managed-item-meta">${meta}<span class="managed-tag">${item.published === false ? 'Hidden' : 'Visible'}</span>${image ? '<span class="managed-tag">Image URL set</span>' : ''}</div></div>
         <div class="managed-actions"><button class="small-action" type="button" data-edit-kind="${kind}" data-id="${escapeHtml(item.id)}">Edit</button><button class="small-action" type="button" data-toggle-kind="${kind}" data-id="${escapeHtml(item.id)}">${item.published === false ? 'Show' : 'Hide'}</button><button class="small-action danger" type="button" data-delete-kind="${kind}" data-id="${escapeHtml(item.id)}">Remove</button></div>
       </article>`;
     }).join('');
@@ -201,7 +206,7 @@
     } catch (error) { notify(error.message, 'error'); return; }
     state[kind] = state[kind].filter(entry => entry.id !== id);
     renderItems(kind);
-    persistDraft(kind);
+    notify(`${kind === 'products' ? 'Product' : 'Service'} removed from the server.`, 'success');
   }
   function resetDraft(key) {
     const label = key === 'homepage' ? 'homepage content' : key === 'contact' ? 'contact details' : key;
@@ -295,15 +300,30 @@
     fillForms();
     renderItems('products');
     renderItems('services');
-    if (API_BASE) {
-      adminRequest('/api/admin/products').then(result => {
-        state.products = (result.items || []).map(p => ({ id:p.id, name:p.name, description:p.description, category:p.category || '', price:p.price || '', imageUrl:p.image_url || '', imagePath: managedImagePath(p.image_url), published:p.published !== false, stockQuantity:Number(p.stock_quantity || 0) }));
-        renderItems('products');
-      }).catch(error => notify(`Products could not be loaded from the server: ${error.message}`, 'error'));
-      adminRequest('/api/admin/services').then(result => {
-        state.services = (result.items || []).map(s => ({ id:s.id, title:s.title, description:s.description, imageUrl:s.image_url || '', imagePath: managedImagePath(s.image_url), published:s.published !== false }));
-        renderItems('services');
-      }).catch(error => notify(`Services could not be loaded from the server: ${error.message}`, 'error'));
+    if (!API_BASE) {
+      setConnectionStatus('error', 'Server connection is not configured', 'The API base URL is missing. Server-backed dashboard features are unavailable.');
+    } else {
+      setConnectionStatus('checking', 'Checking server connection', 'Verifying authenticated admin access and server-backed catalogues…');
+      Promise.allSettled([
+        adminRequest('/api/admin/products').then(result => {
+          state.products = (result.items || []).map(p => ({ id:p.id, name:p.name, description:p.description, category:p.category || '', price:p.price || '', imageUrl:p.image_url || '', imagePath: managedImagePath(p.image_url), published:p.published !== false, stockQuantity:Number(p.stock_quantity || 0) }));
+          renderItems('products');
+        }),
+        adminRequest('/api/admin/services').then(result => {
+          state.services = (result.items || []).map(s => ({ id:s.id, title:s.title, description:s.description, imageUrl:s.image_url || '', imagePath: managedImagePath(s.image_url), published:s.published !== false }));
+          renderItems('services');
+        })
+      ]).then(results => {
+        const succeeded = results.filter(result => result.status === 'fulfilled').length;
+        if (succeeded === 2) setConnectionStatus('connected', 'Server session connected', 'Authenticated API access is working. Products, inventory and services are loaded from the server.');
+        else if (succeeded === 1) {
+          const failed = results.find(result => result.status === 'rejected');
+          setConnectionStatus('partial', 'Server connection partially available', 'One catalogue could not be loaded. ' + (failed && failed.reason ? failed.reason.message : 'Check the API and session configuration.'));
+        } else {
+          const failed = results.find(result => result.status === 'rejected');
+          setConnectionStatus('error', 'Server connection unavailable', failed && failed.reason ? failed.reason.message : 'The authenticated API could not be reached.');
+        }
+      });
     }
 
     $$('.sidebar-link').forEach(button => button.addEventListener('click', () => navigate(button.dataset.panel)));
@@ -339,8 +359,6 @@
 
     $('#add-product-button').addEventListener('click', () => openEditor('products'));
     $('#add-service-button').addEventListener('click', () => openEditor('services'));
-    $('#save-products-button').addEventListener('click', () => persistDraft('products'));
-    $('#save-services-button').addEventListener('click', () => persistDraft('services'));
     $('#products-list').addEventListener('click', handleListAction);
     $('#services-list').addEventListener('click', handleListAction);
     function handleListAction(event) {
@@ -444,7 +462,7 @@
     });
     $('#create-admin-form').addEventListener('submit', event => {
       event.preventDefault();
-      notify('Administrator management is disabled until the authenticated backend is implemented.', 'info');
+      notify('Administrator account management is not yet available. No account changes were made.', 'info');
     });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
