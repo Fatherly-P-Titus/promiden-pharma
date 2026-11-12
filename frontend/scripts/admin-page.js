@@ -295,7 +295,16 @@
     fillForms();
     renderItems('products');
     renderItems('services');
-    if (API_BASE) adminRequest('/api/admin/products').then(result => { state.products = (result.items || []).map(p => ({ id:p.id, name:p.name, description:p.description, category:p.category || '', price:p.price || '', imageUrl:p.image_url || '', imagePath: managedImagePath(p.image_url), published:p.published !== false, stockQuantity:Number(p.stock_quantity || 0) })); renderItems('products'); }).catch(error => notify(`Products could not be loaded from the server: ${error.message}`, 'error'));
+    if (API_BASE) {
+      adminRequest('/api/admin/products').then(result => {
+        state.products = (result.items || []).map(p => ({ id:p.id, name:p.name, description:p.description, category:p.category || '', price:p.price || '', imageUrl:p.image_url || '', imagePath: managedImagePath(p.image_url), published:p.published !== false, stockQuantity:Number(p.stock_quantity || 0) }));
+        renderItems('products');
+      }).catch(error => notify(`Products could not be loaded from the server: ${error.message}`, 'error'));
+      adminRequest('/api/admin/services').then(result => {
+        state.services = (result.items || []).map(s => ({ id:s.id, title:s.title, description:s.description, imageUrl:s.image_url || '', imagePath: managedImagePath(s.image_url), published:s.published !== false }));
+        renderItems('services');
+      }).catch(error => notify(`Services could not be loaded from the server: ${error.message}`, 'error'));
+    }
 
     $$('.sidebar-link').forEach(button => button.addEventListener('click', () => navigate(button.dataset.panel)));
     $$('[data-go]').forEach(button => button.addEventListener('click', () => navigate(button.dataset.go)));
@@ -348,7 +357,11 @@
         item.published = item.published === false;
         if (kind === 'products') {
           adminRequest(`/api/admin/products/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ name:item.name, description:item.description, category:item.category, price:item.price, imageUrl:item.imageUrl, published:item.published }) }).then(() => { renderItems(kind); notify('Product visibility updated on the server.', 'success'); }).catch(error => { item.published = !item.published; renderItems(kind); notify(error.message, 'error'); });
-        } else { renderItems(kind); persistDraft(kind); }
+        } else {
+          adminRequest(`/api/admin/services/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ title:item.title, description:item.description, imageUrl:item.imageUrl, published:item.published }) })
+            .then(() => { renderItems(kind); notify('Service visibility updated on the server.', 'success'); })
+            .catch(error => { item.published = !item.published; renderItems(kind); notify(error.message, 'error'); });
+        }
       }
     }
     $('#item-form').addEventListener('submit', async event => {
@@ -361,7 +374,6 @@
       if (!name || !description) { notify('A title and description are required.', 'error'); return; }
       if (imageUrl && !validOptionalUrl(imageUrl)) { notify('Use a valid HTTP or HTTPS image URL.', 'error'); $('#item-image').focus(); return; }
       const previousItem = editingId ? state[editorKind].find(entry => entry.id === editingId) : null;
-      const previousImageUrl = previousItem?.imageUrl || '';
       const item = {
         id: editingId || `${editorKind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         description, imageUrl: removeImage ? '' : safeImageUrl(imageUrl), published: $('#item-published').checked
@@ -393,8 +405,23 @@
           const targetId = saved.id;
           const stockResult = await adminRequest(`/api/admin/products/${encodeURIComponent(targetId)}/stock`, { method: 'PATCH', headers: { 'Idempotency-Key': `admin-stock-${targetId}-${Date.now()}` }, body: JSON.stringify({ quantity: item.stockQuantity, note: 'Admin product editor stock setting' }) });
           item.id = targetId; item.stockQuantity = stockResult.stockQuantity;
-        } catch (error) { notify(error.message, 'error'); return; }
-      } else item.title = name;
+        } catch (error) {
+          if (item.imagePath && item.imagePath !== previousItem?.imagePath) adminRequest('/api/admin/media', { method: 'DELETE', body: JSON.stringify({ path:item.imagePath }) }).catch(() => {});
+          notify(error.message, 'error'); return;
+        }
+      } else {
+        item.title = name;
+        try {
+          const payload = { title:item.title, description:item.description, imageUrl:item.imageUrl, published:item.published };
+          const saved = editingId
+            ? (await adminRequest(`/api/admin/services/${encodeURIComponent(editingId)}`, { method: 'PUT', body: JSON.stringify(payload) })).item
+            : (await adminRequest('/api/admin/services', { method: 'POST', body: JSON.stringify(payload) })).item;
+          item.id = saved.id;
+        } catch (error) {
+          if (item.imagePath && item.imagePath !== previousItem?.imagePath) adminRequest('/api/admin/media', { method: 'DELETE', body: JSON.stringify({ path:item.imagePath }) }).catch(() => {});
+          notify(error.message, 'error'); return;
+        }
+      }
       const index = state[editorKind].findIndex(entry => entry.id === editingId);
       if (index >= 0) state[editorKind][index] = item; else state[editorKind].push(item);
       if (previousItem?.imagePath && (item.imagePath !== previousItem.imagePath || removeImage)) {
@@ -403,7 +430,7 @@
       }
       closeEditor();
       renderItems(editorKind);
-      if (editorKind === 'products') notify('Product and stock changes saved to the server.', 'success'); else persistDraft(editorKind);
+      notify(`${editorKind === 'products' ? 'Product and stock' : 'Service'} changes saved to the server.`, 'success');
     });
     $('#dialog-close').addEventListener('click', closeEditor);
     $('#dialog-cancel').addEventListener('click', closeEditor);
