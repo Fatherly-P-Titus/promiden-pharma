@@ -10,7 +10,7 @@
     brandName: "PROMIDEN",
     heroTitle: "Better health starts with trusted care.",
     heroDescription: "Your partner in pharmaceutical products, responsible medicine distribution, and healthcare consultancy.",
-    email: "info@promidenpharma.com",
+    email: "",
     phone: "",
     socialLinks: { facebook: "", twitter: "", instagram: "" }
   };
