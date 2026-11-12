@@ -67,6 +67,14 @@
   function escapeHtml(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   }
+  function managedImagePath(value) {
+    try {
+      const url = new URL(String(value || ''));
+      const marker = '/storage/v1/object/public/promiden-public-media/';
+      const index = url.pathname.indexOf(marker);
+      return index >= 0 ? decodeURIComponent(url.pathname.slice(index + marker.length)) : '';
+    } catch (_) { return ''; }
+  }
   function safeImageUrl(value) {
     const trimmed = String(value || '').trim();
     if (!trimmed) return '';
@@ -154,12 +162,27 @@
       <div class="dashboard-field"><label for="item-description">Description</label><textarea id="item-description" name="description" rows="4" required maxlength="700">${escapeHtml(item ? item.description : '')}</textarea><small>Keep the wording accurate and avoid unsupported medical claims.</small></div>
       ${categoryField}
       ${isProduct ? `<div class="dashboard-field"><label for="item-stock">Available stock quantity</label><input id="item-stock" name="stockQuantity" type="number" min="0" max="100000000" step="1" required value="${Number.isInteger(item?.stockQuantity) ? item.stockQuantity : 0}"><small>Whole sellable units. Stock changes are recorded in the inventory ledger.</small></div>` : ''}
-      <div class="dashboard-field"><label for="item-image">Image URL (optional)</label><input id="item-image" name="imageUrl" type="url" maxlength="1000" value="${escapeHtml(item ? item.imageUrl : '')}" placeholder="https://…"><small>Use a publicly accessible HTTPS image URL. Managed storage upload can be added separately.</small></div>
+      <div class="dashboard-field"><label for="item-image-file">Upload image (optional)</label><input id="item-image-file" name="imageFile" type="file" accept="image/jpeg,image/png,image/webp,image/avif"><small>JPEG, PNG, WebP or AVIF · maximum 5 MB. Uploads are stored securely in Promiden media storage.</small><div id="item-image-preview" class="image-upload-preview" ${item?.imageUrl ? '' : 'hidden'}><img src="${escapeHtml(item?.imageUrl || '')}" alt="Current item image preview"><span>Current image</span></div></div>
+      <div class="dashboard-field"><label for="item-image">Or use an external image URL</label><input id="item-image" name="imageUrl" type="url" maxlength="1000" value="${escapeHtml(item ? item.imageUrl : '')}" placeholder="https://…"><small>Leave blank when uploading a file. A newly uploaded file takes priority.</small></div>
+      <label class="visibility-option"><input id="item-remove-image" name="removeImage" type="checkbox"> Remove the current image</label>
       <label class="visibility-option"><input id="item-published" name="published" type="checkbox" ${!item || item.published !== false ? 'checked' : ''}> Show this item on the website draft</label>`;
     if (isProduct && item) $('#item-category').value = item.category || 'Other';
     if (isProduct && !item) $('#item-category').value = 'Wellness';
     const dialog = $('#item-dialog');
     if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', 'open');
+    const preview = $('#item-image-preview');
+    const previewImage = preview.querySelector('img');
+    $('#item-image-file').addEventListener('change', () => {
+      const file = $('#item-image-file').files[0];
+      if (!file) { preview.hidden = !item?.imageUrl; previewImage.src = item?.imageUrl || ''; return; }
+      previewImage.src = URL.createObjectURL(file);
+      preview.hidden = false;
+      preview.querySelector('span').textContent = 'Selected image preview';
+    });
+    $('#item-remove-image').addEventListener('change', event => {
+      if (event.target.checked) { $('#item-image').value = ''; $('#item-image-file').value = ''; preview.hidden = true; }
+      else { preview.hidden = !item?.imageUrl; previewImage.src = item?.imageUrl || ''; }
+    });
     $('#item-name').focus();
   }
   function closeEditor() {
@@ -171,7 +194,11 @@
     if (!item) return;
     const name = kind === 'products' ? item.name : item.title;
     if (!window.confirm(`Permanently remove “${name || 'this item'}” from the catalogue?`)) return;
-    if (kind === 'products') { try { await adminRequest(`/api/admin/products/${encodeURIComponent(id)}`, { method: 'DELETE' }); } catch (error) { notify(error.message, 'error'); return; } }
+    try {
+      if (kind === 'products') await adminRequest(`/api/admin/products/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      else await adminRequest(`/api/admin/services/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (item.imagePath) await adminRequest('/api/admin/media', { method: 'DELETE', body: JSON.stringify({ path: item.imagePath }) });
+    } catch (error) { notify(error.message, 'error'); return; }
     state[kind] = state[kind].filter(entry => entry.id !== id);
     renderItems(kind);
     persistDraft(kind);
@@ -268,7 +295,7 @@
     fillForms();
     renderItems('products');
     renderItems('services');
-    if (API_BASE) adminRequest('/api/admin/products').then(result => { state.products = (result.items || []).map(p => ({ id:p.id, name:p.name, description:p.description, category:p.category || '', price:p.price || '', imageUrl:p.image_url || '', published:p.published !== false, stockQuantity:Number(p.stock_quantity || 0) })); renderItems('products'); }).catch(error => notify(`Products could not be loaded from the server: ${error.message}`, 'error'));
+    if (API_BASE) adminRequest('/api/admin/products').then(result => { state.products = (result.items || []).map(p => ({ id:p.id, name:p.name, description:p.description, category:p.category || '', price:p.price || '', imageUrl:p.image_url || '', imagePath: managedImagePath(p.image_url), published:p.published !== false, stockQuantity:Number(p.stock_quantity || 0) })); renderItems('products'); }).catch(error => notify(`Products could not be loaded from the server: ${error.message}`, 'error'));
 
     $$('.sidebar-link').forEach(button => button.addEventListener('click', () => navigate(button.dataset.panel)));
     $$('[data-go]').forEach(button => button.addEventListener('click', () => navigate(button.dataset.go)));
@@ -328,13 +355,30 @@
       event.preventDefault();
       const name = $('#item-name').value.trim();
       const description = $('#item-description').value.trim();
-      const imageUrl = $('#item-image').value.trim();
+      let imageUrl = $('#item-image').value.trim();
+      const imageFile = $('#item-image-file').files[0] || null;
+      const removeImage = $('#item-remove-image').checked;
       if (!name || !description) { notify('A title and description are required.', 'error'); return; }
       if (imageUrl && !validOptionalUrl(imageUrl)) { notify('Use a valid HTTP or HTTPS image URL.', 'error'); $('#item-image').focus(); return; }
+      const previousItem = editingId ? state[editorKind].find(entry => entry.id === editingId) : null;
+      const previousImageUrl = previousItem?.imageUrl || '';
       const item = {
         id: editingId || `${editorKind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        description, imageUrl: safeImageUrl(imageUrl), published: $('#item-published').checked
+        description, imageUrl: removeImage ? '' : safeImageUrl(imageUrl), published: $('#item-published').checked
       };
+      if (imageFile) {
+        try {
+          const uploaded = await adminRequest(`/api/admin/media/${editorKind}`, {
+            method: 'POST', body: imageFile,
+            headers: { 'Content-Type': imageFile.type }
+          });
+          item.imageUrl = uploaded.imageUrl;
+          item.imagePath = uploaded.imagePath;
+        } catch (error) { notify(error.message, 'error'); return; }
+      } else if (previousItem?.imagePath && !removeImage && !imageUrl) {
+        item.imageUrl = previousItem.imageUrl;
+        item.imagePath = previousItem.imagePath;
+      }
       if (editorKind === 'products') {
         item.name = name;
         item.category = $('#item-category').value;
@@ -353,6 +397,10 @@
       } else item.title = name;
       const index = state[editorKind].findIndex(entry => entry.id === editingId);
       if (index >= 0) state[editorKind][index] = item; else state[editorKind].push(item);
+      if (previousItem?.imagePath && (item.imagePath !== previousItem.imagePath || removeImage)) {
+        try { await adminRequest('/api/admin/media', { method: 'DELETE', body: JSON.stringify({ path: previousItem.imagePath }) }); }
+        catch (error) { notify('Item saved, but the previous image could not be cleaned up: ' + error.message, 'error'); }
+      }
       closeEditor();
       renderItems(editorKind);
       if (editorKind === 'products') notify('Product and stock changes saved to the server.', 'success'); else persistDraft(editorKind);
