@@ -406,7 +406,7 @@
           const stockResult = await adminRequest(`/api/admin/products/${encodeURIComponent(targetId)}/stock`, { method: 'PATCH', headers: { 'Idempotency-Key': `admin-stock-${targetId}-${Date.now()}` }, body: JSON.stringify({ quantity: item.stockQuantity, note: 'Admin product editor stock setting' }) });
           item.id = targetId; item.stockQuantity = stockResult.stockQuantity;
         } catch (error) {
-          if (item.imagePath && item.imagePath !== previousItem?.imagePath) adminRequest('/api/admin/media', { method: 'DELETE', body: JSON.stringify({ path:item.imagePath }) }).catch(() => {});
+          // Keep a newly uploaded file if a later stock operation fails: the product row may already reference it.
           notify(error.message, 'error'); return;
         }
       } else {
@@ -418,7 +418,7 @@
             : (await adminRequest('/api/admin/services', { method: 'POST', body: JSON.stringify(payload) })).item;
           item.id = saved.id;
         } catch (error) {
-          if (item.imagePath && item.imagePath !== previousItem?.imagePath) adminRequest('/api/admin/media', { method: 'DELETE', body: JSON.stringify({ path:item.imagePath }) }).catch(() => {});
+          // Keep a newly uploaded file if persistence fails; avoid deleting a file the row may already reference.
           notify(error.message, 'error'); return;
         }
       }
