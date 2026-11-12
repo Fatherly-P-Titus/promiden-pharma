@@ -77,6 +77,52 @@ router.post('/logout', requireSameOrigin, (req, res) => {
 router.use(requireAdmin);
 router.use(requireSameOrigin);
 
+// M11 image management: authenticated uploads to the public Supabase media bucket.
+const { randomUUID } = require('node:crypto');
+const mediaBucket = 'promiden-public-media';
+const imageTypes = new Map([
+  ['image/jpeg', 'jpg'], ['image/png', 'png'],
+  ['image/webp', 'webp'], ['image/avif', 'avif']
+]);
+router.post('/media/:kind', express.raw({ type: Array.from(imageTypes.keys()), limit: '5mb' }), async (req, res) => {
+  const kind = req.params.kind;
+  if (!['products', 'services'].includes(kind)) return res.status(400).json({ success: false, message: 'Invalid image category.' });
+  const mime = req.get('content-type')?.split(';')[0].trim().toLowerCase();
+  const extension = imageTypes.get(mime);
+  if (!extension || !Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ success: false, message: 'Choose a valid JPEG, PNG, WebP, or AVIF image.' });
+  if (req.body.length > 5 * 1024 * 1024) return res.status(413).json({ success: false, message: 'Image must be 5 MB or smaller.' });
+  // Check file signatures as well as the browser-supplied content type.
+  const signatures = {
+    'image/jpeg': req.body[0] === 0xff && req.body[1] === 0xd8 && req.body[2] === 0xff,
+    'image/png': req.body.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])),
+    'image/webp': req.body.toString('ascii', 0, 4) === 'RIFF' && req.body.toString('ascii', 8, 12) === 'WEBP',
+    'image/avif': req.body.toString('ascii', 4, 12).includes('ftypavif')
+  };
+  if (!signatures[mime]) return res.status(400).json({ success: false, message: 'The selected file does not match its image type.' });
+  const storagePath = kind + '/' + randomUUID() + '.' + extension;
+  const { error } = await supabase.storage.from(mediaBucket).upload(storagePath, req.body, {
+    contentType: mime, cacheControl: '31536000', upsert: false
+  });
+  if (error) {
+    console.error('Admin media upload failed:', error.message);
+    return res.status(503).json({ success: false, message: 'The image could not be uploaded. Check Supabase Storage configuration.' });
+  }
+  const { data } = supabase.storage.from(mediaBucket).getPublicUrl(storagePath);
+  return res.status(201).json({ success: true, imageUrl: data.publicUrl, imagePath: storagePath });
+});
+router.delete('/media', async (req, res) => {
+  const storagePath = typeof req.body?.path === 'string' ? req.body.path : '';
+  if (!/^(products|services)\/[0-9a-f-]{36}\.(jpg|png|webp|avif)$/i.test(storagePath)) {
+    return res.status(400).json({ success: false, message: 'Invalid managed image path.' });
+  }
+  const { error } = await supabase.storage.from(mediaBucket).remove([storagePath]);
+  if (error) {
+    console.error('Admin media cleanup failed:', error.message);
+    return res.status(503).json({ success: false, message: 'The image could not be removed from storage.' });
+  }
+  return res.json({ success: true });
+});
+
 router.get('/site-settings', async (_req, res) => {
   const { data, error } = await supabase.from('site_settings').select('*').eq('id', 1).maybeSingle();
   if (error) return res.status(503).json({ success: false, message: 'Settings could not be loaded.' });
