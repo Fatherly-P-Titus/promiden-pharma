@@ -90,6 +90,37 @@
     box.hidden = false;
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
+  let systemModalBusy = false;
+  function showSystemModal({ state = 'loading', title, message, progress = null, stage = '', steps = [], dismissible = false }) {
+    const dialog = $('#system-alert-dialog');
+    dialog.dataset.state = state;
+    $('#system-alert-mark').textContent = state === 'success' ? '✓' : state === 'error' ? '!' : state === 'warning' ? '!' : '…';
+    $('#system-alert-kicker').textContent = state === 'loading' ? 'PLEASE WAIT' : state === 'success' ? 'COMPLETED' : state === 'error' ? 'ACTION FAILED' : 'SYSTEM MESSAGE';
+    $('#system-alert-title').textContent = title || 'System message';
+    $('#system-alert-message').textContent = message || '';
+    const progressWrap = $('#system-alert-progress-wrap');
+    progressWrap.hidden = progress === null;
+    if (progress !== null) {
+      const value = Math.max(0, Math.min(100, Number(progress) || 0));
+      $('#system-alert-progress-bar').style.width = value + '%';
+      $('#system-alert-progress-value').textContent = Math.round(value) + '%';
+      $('#system-alert-progress-stage').textContent = stage || 'Processing…';
+    }
+    const list = $('#system-alert-steps');
+    list.hidden = !steps.length;
+    list.innerHTML = steps.map(step => `<li data-state="${escapeHtml(step.state)}">${escapeHtml(step.label)}</li>`).join('');
+    $('#system-alert-actions').hidden = !dismissible;
+    systemModalBusy = !dismissible;
+    if (!dialog.open) dialog.showModal();
+  }
+  function closeSystemModal() {
+    if (systemModalBusy) return;
+    const dialog = $('#system-alert-dialog');
+    if (dialog.open) dialog.close();
+  }
+  function systemStep(steps, activeIndex) {
+    return steps.map((step, index) => ({ label: step, state: index < activeIndex ? 'done' : index === activeIndex ? 'active' : 'pending' }));
+  }
   function setConnectionStatus(state, title, detail) {
     const panel = $('#dashboard-connection-status');
     if (!panel) return;
@@ -384,73 +415,112 @@
     }
     $('#item-form').addEventListener('submit', async event => {
       event.preventDefault();
-      const name = $('#item-name').value.trim();
-      const description = $('#item-description').value.trim();
-      let imageUrl = $('#item-image').value.trim();
-      const imageFile = $('#item-image-file').files[0] || null;
-      const removeImage = $('#item-remove-image').checked;
-      if (!name || !description) { notify('A title and description are required.', 'error'); return; }
-      if (imageUrl && !validOptionalUrl(imageUrl)) { notify('Use a valid HTTP or HTTPS image URL.', 'error'); $('#item-image').focus(); return; }
-      const previousItem = editingId ? state[editorKind].find(entry => entry.id === editingId) : null;
-      const item = {
-        id: editingId || `${editorKind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        description, imageUrl: removeImage ? '' : safeImageUrl(imageUrl), published: $('#item-published').checked
-      };
-      if (imageFile) {
-        try {
+      if (systemModalBusy) return;
+      const form = event.currentTarget;
+      const saveButton = $('#dialog-save');
+      const steps = ['Validate product details', 'Upload image', 'Save catalogue item', 'Update stock quantity', 'Finish and refresh catalogue'];
+      const isProduct = editorKind === 'products';
+      const plan = isProduct ? steps : ['Validate service details', 'Upload image', 'Save service', 'Finish and refresh catalogue'];
+      const progressAt = (index, title, message) => showSystemModal({
+        state:'loading', title, message, progress:Math.round((index / (plan.length - 1)) * 100),
+        stage:plan[index], steps:systemStep(plan, index)
+      });
+      saveButton.disabled = true;
+      saveButton.textContent = 'Processing…';
+      form.setAttribute('aria-busy', 'true');
+      try {
+        progressAt(0, 'Checking your details', 'Please keep this window open while Promiden processes your request.');
+        const name = $('#item-name').value.trim();
+        const description = $('#item-description').value.trim();
+        let imageUrl = $('#item-image').value.trim();
+        const imageFile = $('#item-image-file').files[0] || null;
+        const removeImage = $('#item-remove-image').checked;
+        if (!name || !description) throw new Error('A title and description are required.');
+        if (imageUrl && !validOptionalUrl(imageUrl)) throw new Error('Use a valid HTTP or HTTPS image URL.');
+        if (imageFile && (!['image/jpeg','image/png','image/webp','image/avif'].includes(imageFile.type) || imageFile.size > 5 * 1024 * 1024)) {
+          throw new Error('Choose a JPEG, PNG, WebP or AVIF image no larger than 5 MB.');
+        }
+        const previousItem = editingId ? state[editorKind].find(entry => entry.id === editingId) : null;
+        const item = {
+          id: editingId || `${editorKind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          description, imageUrl: removeImage ? '' : safeImageUrl(imageUrl), published: $('#item-published').checked
+        };
+        if (isProduct) {
+          item.name = name;
+          item.category = $('#item-category').value;
+          item.price = $('#item-price').value.trim();
+          item.stockQuantity = Number($('#item-stock').value);
+          if (!Number.isInteger(item.stockQuantity) || item.stockQuantity < 0) throw new Error('Stock must be a non-negative whole number.');
+        } else item.title = name;
+
+        if (imageFile) {
+          progressAt(1, 'Uploading image', 'Uploading and validating your image in Promiden media storage.');
           const uploaded = await adminRequest(`/api/admin/media/${editorKind}`, {
-            method: 'POST', body: imageFile,
-            headers: { 'Content-Type': imageFile.type }
+            method:'POST', body:imageFile, headers:{'Content-Type':imageFile.type}
           });
           item.imageUrl = uploaded.imageUrl;
           item.imagePath = uploaded.imagePath;
-        } catch (error) { notify(error.message, 'error'); return; }
-      } else if (previousItem?.imagePath && !removeImage && !imageUrl) {
-        item.imageUrl = previousItem.imageUrl;
-        item.imagePath = previousItem.imagePath;
-      }
-      if (editorKind === 'products') {
-        item.name = name;
-        item.category = $('#item-category').value;
-        item.price = $('#item-price').value.trim();
-        item.stockQuantity = Number($('#item-stock').value);
-        if (!Number.isInteger(item.stockQuantity) || item.stockQuantity < 0) { notify('Stock must be a non-negative whole number.', 'error'); return; }
-        try {
-          const payload = { name: item.name, description: item.description, category: item.category, price: item.price, imageUrl: item.imageUrl, published: item.published };
-          let saved;
-          if (editingId) { saved = (await adminRequest(`/api/admin/products/${encodeURIComponent(editingId)}`, { method: 'PUT', body: JSON.stringify(payload) })).item; }
-          else { saved = (await adminRequest('/api/admin/products', { method: 'POST', body: JSON.stringify(payload) })).item; }
-          const targetId = saved.id;
-          const stockResult = await adminRequest(`/api/admin/products/${encodeURIComponent(targetId)}/stock`, { method: 'PATCH', headers: { 'Idempotency-Key': `admin-stock-${targetId}-${Date.now()}` }, body: JSON.stringify({ quantity: item.stockQuantity, note: 'Admin product editor stock setting' }) });
-          item.id = targetId; item.stockQuantity = stockResult.stockQuantity;
-        } catch (error) {
-          // Keep a newly uploaded file if a later stock operation fails: the product row may already reference it.
-          notify(error.message, 'error'); return;
+        } else if (previousItem?.imagePath && !removeImage && !imageUrl) {
+          item.imageUrl = previousItem.imageUrl;
+          item.imagePath = previousItem.imagePath;
         }
-      } else {
-        item.title = name;
-        try {
-          const payload = { title:item.title, description:item.description, imageUrl:item.imageUrl, published:item.published };
+        progressAt(isProduct ? 2 : 2, isProduct ? 'Saving product details' : 'Saving service details', 'Writing the catalogue record to the Promiden database.');
+        if (isProduct) {
+          const payload = { name:item.name, description:item.description, category:item.category, price:item.price, imageUrl:item.imageUrl, published:item.published };
           const saved = editingId
-            ? (await adminRequest(`/api/admin/services/${encodeURIComponent(editingId)}`, { method: 'PUT', body: JSON.stringify(payload) })).item
-            : (await adminRequest('/api/admin/services', { method: 'POST', body: JSON.stringify(payload) })).item;
+            ? (await adminRequest(`/api/admin/products/${encodeURIComponent(editingId)}`, {method:'PUT',body:JSON.stringify(payload)})).item
+            : (await adminRequest('/api/admin/products', {method:'POST',body:JSON.stringify(payload)})).item;
           item.id = saved.id;
-        } catch (error) {
-          // Keep a newly uploaded file if persistence fails; avoid deleting a file the row may already reference.
-          notify(error.message, 'error'); return;
+          progressAt(3, 'Updating stock quantity', 'Recording the available quantity in the inventory ledger.');
+          const stockResult = await adminRequest(`/api/admin/products/${encodeURIComponent(item.id)}/stock`, {
+            method:'PATCH', headers:{'Idempotency-Key':`admin-stock-${item.id}-${Date.now()}`},
+            body:JSON.stringify({quantity:item.stockQuantity,note:'Admin product editor stock setting'})
+          });
+          item.stockQuantity = stockResult.stockQuantity;
+        } else {
+          const payload = {title:item.title,description:item.description,imageUrl:item.imageUrl,published:item.published};
+          const saved = editingId
+            ? (await adminRequest(`/api/admin/services/${encodeURIComponent(editingId)}`,{method:'PUT',body:JSON.stringify(payload)})).item
+            : (await adminRequest('/api/admin/services',{method:'POST',body:JSON.stringify(payload)})).item;
+          item.id = saved.id;
         }
+        progressAt(plan.length - 1, 'Finishing up', 'Refreshing the dashboard catalogue.');
+        const index = state[editorKind].findIndex(entry => entry.id === editingId);
+        if (index >= 0) state[editorKind][index] = item; else state[editorKind].push(item);
+        let cleanupWarning = '';
+        if (previousItem?.imagePath && (item.imagePath !== previousItem.imagePath || removeImage)) {
+          try { await adminRequest('/api/admin/media',{method:'DELETE',body:JSON.stringify({path:previousItem.imagePath})}); }
+          catch (error) { cleanupWarning = ' The previous image could not be cleaned up: ' + error.message; }
+        }
+        closeEditor();
+        renderItems(editorKind);
+        showSystemModal({
+          state: cleanupWarning ? 'warning' : 'success',
+          title: cleanupWarning ? 'Saved with a cleanup warning' : (isProduct ? 'Product saved successfully' : 'Service saved successfully'),
+          message: (isProduct ? 'The product details and stock quantity have been saved.' : 'The service has been saved to the server.') + cleanupWarning,
+          progress:100, stage:'Complete', steps:systemStep(plan, plan.length)
+        });
+        systemModalBusy = false;
+        $('#system-alert-actions').hidden = false;
+      } catch (error) {
+        showSystemModal({
+          state:'error', title:'We could not complete that action',
+          message:error.message || 'An unexpected error occurred. Check your connection and try again.',
+          progress:null, dismissible:true
+        });
+        systemModalBusy = false;
+        if (error.message && /session has expired/i.test(error.message)) {
+          $('#system-alert-message').textContent += ' You will be returned to sign in.';
+        }
+      } finally {
+        saveButton.disabled = false;
+        saveButton.textContent = 'Save item';
+        form.removeAttribute('aria-busy');
       }
-      const index = state[editorKind].findIndex(entry => entry.id === editingId);
-      if (index >= 0) state[editorKind][index] = item; else state[editorKind].push(item);
-      if (previousItem?.imagePath && (item.imagePath !== previousItem.imagePath || removeImage)) {
-        try { await adminRequest('/api/admin/media', { method: 'DELETE', body: JSON.stringify({ path: previousItem.imagePath }) }); }
-        catch (error) { notify('Item saved, but the previous image could not be cleaned up: ' + error.message, 'error'); }
-      }
-      closeEditor();
-      renderItems(editorKind);
-      notify(`${editorKind === 'products' ? 'Product and stock' : 'Service'} changes saved to the server.`, 'success');
     });
     $('#dialog-close').addEventListener('click', closeEditor);
+    $('#system-alert-dismiss').addEventListener('click', closeSystemModal);
+    $('#system-alert-dialog').addEventListener('cancel', event => { if (systemModalBusy) event.preventDefault(); });
     $('#dialog-cancel').addEventListener('click', closeEditor);
     $('#item-dialog').addEventListener('click', event => { if (event.target === $('#item-dialog')) closeEditor(); });
 
