@@ -111,6 +111,20 @@
       <div id="item-fields"></div><div class="form-actions dialog-actions"><button class="button button-outline" type="button" id="dialog-cancel">Cancel</button><button class="button button-primary" type="submit" id="dialog-save">Save item</button></div>
     </form>
   </dialog>
+  <dialog class="system-alert-dialog" id="system-alert-dialog" aria-labelledby="system-alert-title" aria-describedby="system-alert-message">
+    <div class="system-alert-content">
+      <div class="system-alert-mark" id="system-alert-mark" aria-hidden="true">i</div>
+      <p class="dashboard-eyebrow" id="system-alert-kicker">SYSTEM MESSAGE</p>
+      <h2 id="system-alert-title">Please wait</h2>
+      <p id="system-alert-message" role="status" aria-live="polite">Your request is being processed.</p>
+      <div class="system-alert-progress" id="system-alert-progress-wrap" hidden>
+        <div class="system-alert-progress-track"><span id="system-alert-progress-bar"></span></div>
+        <div class="system-alert-progress-meta"><span id="system-alert-progress-stage">Preparing…</span><strong id="system-alert-progress-value">0%</strong></div>
+      </div>
+      <ul class="system-alert-steps" id="system-alert-steps" hidden></ul>
+      <div class="system-alert-actions" id="system-alert-actions" hidden><button class="button button-primary" type="button" id="system-alert-dismiss">Continue</button></div>
+    </div>
+  </dialog>
   <noscript><div class="noscript-message">JavaScript is required to use the administration dashboard.</div></noscript>
 </body>
 </html>
