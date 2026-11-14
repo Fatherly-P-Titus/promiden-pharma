@@ -199,7 +199,6 @@
       ${categoryField}
       ${isProduct ? `<div class="dashboard-field"><label for="item-stock">Available stock quantity</label><input id="item-stock" name="stockQuantity" type="number" min="0" max="100000000" step="1" required value="${Number.isInteger(item?.stockQuantity) ? item.stockQuantity : 0}"><small>Whole sellable units. Stock changes are recorded in the inventory ledger.</small></div>` : ''}
       <div class="dashboard-field"><label for="item-image-file">Upload image (optional)</label><input id="item-image-file" name="imageFile" type="file" accept="image/jpeg,image/png,image/webp,image/avif"><small>JPEG, PNG, WebP or AVIF · maximum 5 MB. Uploads are stored securely in Promiden media storage.</small><div id="item-image-preview" class="image-upload-preview" ${item?.imageUrl ? '' : 'hidden'}><img src="${escapeHtml(item?.imageUrl || '')}" alt="Current item image preview"><span>Current image</span></div></div>
-      <div class="dashboard-field"><label for="item-image">Or use an external image URL</label><input id="item-image" name="imageUrl" type="url" maxlength="1000" value="${escapeHtml(item ? item.imageUrl : '')}" placeholder="https://…"><small>Leave blank when uploading a file. A newly uploaded file takes priority.</small></div>
       <label class="visibility-option"><input id="item-remove-image" name="removeImage" type="checkbox"> Remove the current image</label>
       <label class="visibility-option"><input id="item-published" name="published" type="checkbox" ${!item || item.published !== false ? 'checked' : ''}> Show this item on the website draft</label>`;
     if (isProduct && item) $('#item-category').value = item.category || 'Other';
@@ -248,10 +247,6 @@
     if (key === 'products' || key === 'services') renderItems(key);
     notify(`${label[0].toUpperCase() + label.slice(1)} reset to starter values.`, 'info');
   }
-  function validOptionalUrl(value) {
-    if (!value.trim()) return true;
-    try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol); } catch (_) { return false; }
-  }
   function moneyMinor(value, currency = 'NGN') {
     const number = Number(value);
     if (!Number.isFinite(number)) return '—';
@@ -262,7 +257,12 @@
     const response = await fetch(API_BASE + path, { ...options, credentials: 'include', headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) } });
     const payload = await response.json().catch(() => ({}));
     if (response.status === 401) { window.location.assign('admin-login.html'); throw new Error('Your administrator session has expired. Sign in again.'); }
-    if (!response.ok || payload.success === false) throw new Error(payload.message || 'The request could not be completed.');
+    if (!response.ok || payload.success === false) {
+      if (response.status === 404 && String(payload.message || '').toLowerCase().includes('endpoint not found')) {
+        throw new Error(`The deployed Promiden API does not recognise ${options.method || 'GET'} ${path}. The backend deployment may be behind the frontend; redeploy the latest main branch on Render and try again.`);
+      }
+      throw new Error(payload.message || `The request failed (HTTP ${response.status}).`);
+    }
     return payload;
   }
   async function loadOrders() {
@@ -432,18 +432,16 @@
         progressAt(0, 'Checking your details', 'Please keep this window open while Promiden processes your request.');
         const name = $('#item-name').value.trim();
         const description = $('#item-description').value.trim();
-        let imageUrl = $('#item-image').value.trim();
         const imageFile = $('#item-image-file').files[0] || null;
         const removeImage = $('#item-remove-image').checked;
         if (!name || !description) throw new Error('A title and description are required.');
-        if (imageUrl && !validOptionalUrl(imageUrl)) throw new Error('Use a valid HTTP or HTTPS image URL.');
         if (imageFile && (!['image/jpeg','image/png','image/webp','image/avif'].includes(imageFile.type) || imageFile.size > 5 * 1024 * 1024)) {
           throw new Error('Choose a JPEG, PNG, WebP or AVIF image no larger than 5 MB.');
         }
         const previousItem = editingId ? state[editorKind].find(entry => entry.id === editingId) : null;
         const item = {
           id: editingId || `${editorKind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          description, imageUrl: removeImage ? '' : safeImageUrl(imageUrl), published: $('#item-published').checked
+          description, imageUrl: removeImage ? '' : (previousItem?.imageUrl || ''), published: $('#item-published').checked
         };
         if (isProduct) {
           item.name = name;
@@ -460,7 +458,7 @@
           });
           item.imageUrl = uploaded.imageUrl;
           item.imagePath = uploaded.imagePath;
-        } else if (previousItem?.imagePath && !removeImage && !imageUrl) {
+        } else if (previousItem?.imagePath && !removeImage) {
           item.imageUrl = previousItem.imageUrl;
           item.imagePath = previousItem.imagePath;
         }
