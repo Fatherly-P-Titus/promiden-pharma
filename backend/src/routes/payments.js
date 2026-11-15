@@ -51,7 +51,7 @@ async function getAuthoritativeItems(lines) {
     total += lineTotal;
     result.push({ ...item, quantity, lineTotal });
   }
-  if (total < 5000) throw Object.assign(new Error('The minimum online payment amount is ₦50.00. Please contact Promiden for smaller orders.'), { status: 400 });
+  if (total < 5000) throw Object.assign(new Error('The minimum online payment amount is GH₵50.00. Please contact Promiden for smaller orders.'), { status: 400 });
   return { items: result, total };
 }
 
@@ -79,7 +79,7 @@ router.post('/orders', async (req, res) => {
     const orderPayload = {
       order_number: orderNumber, idempotency_key: idempotencyKey || null,
       customer_email: customerEmail, customer_name: customerName, customer_phone: customerPhone,
-      order_type: orderType, currency: 'NGN', subtotal_minor: total, total_minor: total,
+      order_type: orderType, currency: 'GHS', subtotal_minor: total, total_minor: total,
       order_status: 'awaiting_payment', payment_status: 'pending', customer_note: customerNote
     };
     const { data: order, error: orderError } = await supabase.from('orders').insert(orderPayload).select('*').single();
@@ -121,13 +121,13 @@ router.post('/payments/initialize', async (req, res) => {
     if (!order) return fail(res, 404, 'Order not found. Please review your order again.');
     if (order.payment_status === 'successful' || order.payment_status === 'refunded' || order.order_status !== 'awaiting_payment') return fail(res, 409, 'This order is not awaiting payment.');
     const amount = Number(order.total_minor);
-    if (!moneyIsSafe(amount) || order.currency !== 'NGN') return fail(res, 409, 'The order amount is not valid for online payment.');
+    if (!moneyIsSafe(amount) || !['GHS', 'NGN'].includes(order.currency)) return fail(res, 409, 'The order amount is not valid for online payment.');
     // Reuse an existing pending Paystack session instead of creating another
     // chargeable reference when a customer retries the checkout button.
     const { data: pendingTx, error: pendingTxError } = await supabase.from('payment_transactions').select('provider_reference,authorization_url,amount_minor,currency').eq('order_id', order.id).eq('status', 'pending').order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (pendingTxError) throw pendingTxError;
-    if (pendingTx && pendingTx.authorization_url && Number(pendingTx.amount_minor) === amount && pendingTx.currency === 'NGN') {
-      return res.status(200).json({ success: true, reused: true, order: { id: order.id, orderNumber: order.order_number, totalMinor: amount, currency: 'NGN' }, payment: { provider: 'paystack', reference: pendingTx.provider_reference, authorizationUrl: pendingTx.authorization_url } });
+    if (pendingTx && pendingTx.authorization_url && Number(pendingTx.amount_minor) === amount && pendingTx.currency === order.currency) {
+      return res.status(200).json({ success: true, reused: true, order: { id: order.id, orderNumber: order.order_number, totalMinor: amount, currency: order.currency }, payment: { provider: 'paystack', reference: pendingTx.provider_reference, authorizationUrl: pendingTx.authorization_url } });
     }
     if (['failed', 'cancelled'].includes(order.payment_status)) {
       const { error: resetOrderError } = await supabase.from('orders').update({ payment_status: 'pending', updated_at: new Date().toISOString() }).eq('id', order.id).eq('order_status', 'awaiting_payment');
@@ -138,7 +138,7 @@ router.post('/payments/initialize', async (req, res) => {
     if (!origin || !/^https?:\/\//i.test(origin)) return fail(res, 503, 'The payment callback URL is not configured. Please contact Promiden.');
     const response = await fetch(`${PAYSTACK_API}/transaction/initialize`, {
       method: 'POST', headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: order.customer_email, amount: String(amount), currency: 'NGN', reference, callback_url: `${origin}/payment.html`, metadata: { order_id: order.id, order_number: order.order_number, custom_fields: [{ display_name: 'Order Number', variable_name: 'order_number', value: order.order_number }] } }),
+      body: JSON.stringify({ email: order.customer_email, amount: String(amount), currency: order.currency, reference, callback_url: `${origin}/payment.html`, metadata: { order_id: order.id, order_number: order.order_number, custom_fields: [{ display_name: 'Order Number', variable_name: 'order_number', value: order.order_number }] } }),
       signal: AbortSignal.timeout(12000)
     });
     const payload = await response.json().catch(() => null);
@@ -148,7 +148,7 @@ router.post('/payments/initialize', async (req, res) => {
     }
     const { error: transactionError } = await supabase.from('payment_transactions').insert({
       order_id: order.id, provider: 'paystack', provider_reference: reference,
-      amount_minor: amount, currency: 'NGN', status: 'pending', authorization_url: payload.data.authorization_url
+      amount_minor: amount, currency: order.currency, status: 'pending', authorization_url: payload.data.authorization_url
     });
     if (transactionError) throw transactionError;
     return res.status(200).json({ success: true, order: { id: order.id, orderNumber: order.order_number, totalMinor: amount, currency: 'NGN' }, payment: { provider: 'paystack', reference, authorizationUrl: payload.data.authorization_url } });
@@ -186,7 +186,7 @@ async function applyVerifiedTransaction(data) {
   if (!order) return { outcome: 'unmatched' };
 
   const amountMatches = Number(data.amount) === Number(tx.amount_minor) && Number(data.amount) === Number(order.total_minor);
-  const currencyMatches = data.currency === 'NGN' && tx.currency === 'NGN' && order.currency === 'NGN';
+  const currencyMatches = data.currency === order.currency && tx.currency === order.currency && ['GHS', 'NGN'].includes(order.currency);
   const referenceMatches = data.reference === tx.provider_reference;
   const status = typeof data.status === 'string' ? data.status.toLowerCase() : 'unknown';
   const success = status === 'success' && amountMatches && currencyMatches && referenceMatches;
