@@ -174,7 +174,7 @@
       const name = isProduct ? item.name : item.title;
       const image = safeImageUrl(item.imageUrl);
       const meta = isProduct
-        ? `<span class="managed-tag">${escapeHtml(item.category || 'Uncategorised')}</span>${item.price ? `<span class="managed-tag">${escapeHtml(item.price)}</span>` : '<span class="managed-tag">Price not set</span>'}<span class="managed-tag">Stock: ${Number(item.stockQuantity || 0)}</span>`
+        ? `<span class="managed-tag">${escapeHtml(item.category || 'Uncategorised')}</span>${item.price_minor ? `<span class="managed-tag">${escapeHtml(formatGhs(item.price_minor))}</span>` : '<span class="managed-tag">Price not set</span>'}<span class="managed-tag">Stock: ${Number(item.stockQuantity || 0)}</span>`
         : `<span class="managed-tag">Service ${String(index + 1).padStart(2, '0')}</span>`;
       return `<article class="managed-item" data-id="${escapeHtml(item.id)}">
         <div class="managed-item-mark" aria-hidden="true">${image ? '▧' : (isProduct ? '▦' : '✚')}</div>
