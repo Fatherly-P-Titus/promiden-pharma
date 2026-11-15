@@ -151,7 +151,7 @@ router.post('/payments/initialize', async (req, res) => {
       amount_minor: amount, currency: order.currency, status: 'pending', authorization_url: payload.data.authorization_url
     });
     if (transactionError) throw transactionError;
-    return res.status(200).json({ success: true, order: { id: order.id, orderNumber: order.order_number, totalMinor: amount, currency: 'NGN' }, payment: { provider: 'paystack', reference, authorizationUrl: payload.data.authorization_url } });
+    return res.status(200).json({ success: true, order: { id: order.id, orderNumber: order.order_number, totalMinor: amount, currency: order.currency }, payment: { provider: 'paystack', reference, authorizationUrl: payload.data.authorization_url } });
   } catch (error) {
     console.error('Payment initialization failed:', error.message || error);
     return fail(res, 502, 'Secure checkout could not be started. Please try again shortly.');
