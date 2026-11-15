@@ -4,7 +4,7 @@
   const API_BASE = (window.PROMIDEN_API_BASE || "").replace(/\/$/, "");
   const CART_KEY = "promiden_checkout_cart_v1";
   const state = { catalogue: [], cart: readCart(), type: "all", query: "" };
-  const money = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", minimumFractionDigits: 2 });
+  const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", minimumFractionDigits: 2 });
 
   function escapeHtml(value) { return String(value == null ? "" : value).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])); }
   function safeImage(value) { if (!value) return ""; try { const u = new URL(value, window.location.origin); return ["http:","https:"].includes(u.protocol) ? u.href : ""; } catch (_) { return ""; } }

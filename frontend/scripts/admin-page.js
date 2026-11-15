@@ -174,7 +174,7 @@
       const name = isProduct ? item.name : item.title;
       const image = safeImageUrl(item.imageUrl);
       const meta = isProduct
-        ? `<span class="managed-tag">${escapeHtml(item.category || 'Uncategorised')}</span>${item.price ? `<span class="managed-tag">${escapeHtml(item.price)}</span>` : '<span class="managed-tag">Price not set</span>'}<span class="managed-tag">Stock: ${Number(item.stockQuantity || 0)}</span>`
+        ? `<span class="managed-tag">${escapeHtml(item.category || 'Uncategorised')}</span>${item.price_minor ? `<span class="managed-tag">${escapeHtml(formatGhs(item.price_minor))}</span>` : '<span class="managed-tag">Price not set</span>'}<span class="managed-tag">Stock: ${Number(item.stockQuantity || 0)}</span>`
         : `<span class="managed-tag">Service ${String(index + 1).padStart(2, '0')}</span>`;
       return `<article class="managed-item" data-id="${escapeHtml(item.id)}">
         <div class="managed-item-mark" aria-hidden="true">${image ? '▧' : (isProduct ? '▦' : '✚')}</div>
@@ -193,7 +193,7 @@
     $('#item-dialog-title').textContent = `${item ? 'Edit' : 'Add'} ${isProduct ? 'product' : 'service'}`;
     const nameLabel = isProduct ? 'Product name' : 'Service title';
     const nameValue = item ? (isProduct ? item.name : item.title) : '';
-    const categoryField = isProduct ? `<div class="dashboard-field"><label for="item-category">Category</label><select id="item-category" name="category" required><option value="Wellness">Wellness</option><option value="First aid">First aid</option><option value="Everyday care">Everyday care</option><option value="Prescription medicines">Prescription medicines</option><option value="OTC medicines">OTC medicines</option><option value="Other">Other</option></select></div><div class="dashboard-field"><label for="item-price">Price (optional)</label><input id="item-price" name="price" maxlength="80" placeholder="Leave blank until verified"></div>` : '';
+    const categoryField = isProduct ? `<div class="dashboard-field"><label for="item-category">Category</label><select id="item-category" name="category" required><option value="Wellness">Wellness</option><option value="First aid">First aid</option><option value="Everyday care">Everyday care</option><option value="Prescription medicines">Prescription medicines</option><option value="OTC medicines">OTC medicines</option><option value="Other">Other</option></select></div><div class="dashboard-field"><label for="item-price">Price (optional)</label><input id="item-price" name="price" type="number" min="0.01" max="10000000" step="0.01" inputmode="decimal" placeholder="e.g. 2500.00" value="${escapeHtml(item?.price_minor ? (Number(item.price_minor) / 100).toFixed(2) : '')}"><small>Enter the amount in Ghana cedis only, without GH₵ or other symbols. Saved as pesewas.</small></div>` : '';
     $('#item-fields').innerHTML = `<div class="dashboard-field"><label for="item-name">${nameLabel}</label><input id="item-name" name="name" required maxlength="140" value="${escapeHtml(nameValue)}"></div>
       <div class="dashboard-field"><label for="item-description">Description</label><textarea id="item-description" name="description" rows="4" required maxlength="700">${escapeHtml(item ? item.description : '')}</textarea><small>Keep the wording accurate and avoid unsupported medical claims.</small></div>
       ${categoryField}
@@ -247,10 +247,11 @@
     if (key === 'products' || key === 'services') renderItems(key);
     notify(`${label[0].toUpperCase() + label.slice(1)} reset to starter values.`, 'info');
   }
-  function moneyMinor(value, currency = 'NGN') {
+  function formatGhs(value) { const number = Number(value); return Number.isSafeInteger(number) && number > 0 ? new Intl.NumberFormat('en-GH', { style:'currency', currency:'GHS', minimumFractionDigits:2 }).format(number / 100) : 'Price not set'; }
+  function moneyMinor(value, currency = 'GHS') {
     const number = Number(value);
     if (!Number.isFinite(number)) return '—';
-    return new Intl.NumberFormat('en-NG', { style: 'currency', currency, minimumFractionDigits: 2 }).format(number / 100);
+    return new Intl.NumberFormat('en-GH', { style: 'currency', currency, minimumFractionDigits: 2 }).format(number / 100);
   }
   function statusLabel(value) { return String(value || 'unknown').replaceAll('_', ' '); }
   async function adminRequest(path, options = {}) {
@@ -447,6 +448,7 @@
           item.name = name;
           item.category = $('#item-category').value;
           item.price = $('#item-price').value.trim();
+          if (item.price && (!/^\\d{1,9}(?:\\.\\d{1,2})?$/.test(item.price) || Number(item.price) <= 0)) throw new Error('Enter a valid numeric price in Ghana cedis, without a currency symbol.');
           item.stockQuantity = Number($('#item-stock').value);
           if (!Number.isInteger(item.stockQuantity) || item.stockQuantity < 0) throw new Error('Stock must be a non-negative whole number.');
         } else item.title = name;

@@ -146,6 +146,19 @@ router.put('/site-settings', async (req, res) => {
   } catch (error) { respondError(res, error); }
 });
 
+function priceToMinor(value) {
+  if (value === '' || value == null) return null;
+  const raw = typeof value === 'number' ? String(value) : String(value).trim();
+  if (!/^\\d{1,9}(?:\\.\\d{1,2})?$/.test(raw)) {
+    throw Object.assign(new Error('Enter a numeric price in Ghana cedis, without a currency symbol.'), { status: 400 });
+  }
+  const minor = Math.round(Number(raw) * 100);
+  if (!Number.isSafeInteger(minor) || minor <= 0) {
+    throw Object.assign(new Error('Price must be greater than zero and within the supported limit.'), { status: 400 });
+  }
+  return minor;
+}
+
 function collectionRoutes(kind) {
   const table = kind;
   const isProduct = kind === 'products';
@@ -166,7 +179,7 @@ function collectionRoutes(kind) {
       if (isProduct) {
         row.name = text(body.name, 140, 'Product name', { required: true });
         row.category = text(body.category, 100, 'Category');
-        row.price = text(body.price, 80, 'Price');
+        row.price_minor = priceToMinor(body.price); row.price = body.price == null || body.price === '' ? '' : String(body.price).trim();
       } else row.title = text(body.title, 140, 'Service title', { required: true });
       const { data, error } = await supabase.from(table).insert(row).select().single();
       if (error) return res.status(400).json({ success: false, message: `Could not create ${isProduct ? 'product' : 'service'}. Check that the fields are valid.` });
@@ -180,7 +193,7 @@ function collectionRoutes(kind) {
         description: text(body.description, 700, 'Description', { required: true }), image_url: optionalUrl(body.imageUrl || body.image_url, 'Image URL'),
         published: body.published !== false, sort_order: Number.isInteger(body.sortOrder) ? body.sortOrder : 0, updated_at: new Date().toISOString()
       };
-      if (isProduct) { row.name = text(body.name, 140, 'Product name', { required: true }); row.category = text(body.category, 100, 'Category'); row.price = text(body.price, 80, 'Price'); }
+      if (isProduct) { row.name = text(body.name, 140, 'Product name', { required: true }); row.category = text(body.category, 100, 'Category'); row.price_minor = priceToMinor(body.price); row.price = body.price == null || body.price === '' ? '' : String(body.price).trim(); }
       else row.title = text(body.title, 140, 'Service title', { required: true });
       const { data, error } = await supabase.from(table).update(row).eq('id', req.params.id).select().maybeSingle();
       if (error) return res.status(400).json({ success: false, message: 'Could not update this item.' });
