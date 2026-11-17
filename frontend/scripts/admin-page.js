@@ -448,7 +448,7 @@
           item.name = name;
           item.category = $('#item-category').value;
           item.price = $('#item-price').value.trim();
-          if (item.price && (!/^\\d{1,9}(?:\\.\\d{1,2})?$/.test(item.price) || Number(item.price) <= 0)) throw new Error('Enter a valid numeric price in Ghana cedis, without a currency symbol.');
+          if (item.price && (!/^\d{1,9}(?:\.\d{1,2})?$/.test(item.price) || Number(item.price) <= 0)) throw new Error('Enter a valid numeric price in Ghana cedis, without a currency symbol.');
           item.stockQuantity = Number($('#item-stock').value);
           if (!Number.isInteger(item.stockQuantity) || item.stockQuantity < 0) throw new Error('Stock must be a non-negative whole number.');
         } else item.title = name;
