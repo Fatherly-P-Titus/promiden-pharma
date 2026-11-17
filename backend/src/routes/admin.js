@@ -149,7 +149,7 @@ router.put('/site-settings', async (req, res) => {
 function priceToMinor(value) {
   if (value === '' || value == null) return null;
   const raw = typeof value === 'number' ? String(value) : String(value).trim();
-  if (!/^\\d{1,9}(?:\\.\\d{1,2})?$/.test(raw)) {
+  if (!/^\d{1,9}(?:\.\d{1,2})?$/.test(raw)) {
     throw Object.assign(new Error('Enter a numeric price in Ghana cedis, without a currency symbol.'), { status: 400 });
   }
   const minor = Math.round(Number(raw) * 100);
